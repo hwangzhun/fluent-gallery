@@ -1,0 +1,207 @@
+/**
+ * 设置服务（前端）
+ */
+import { API_BASE_URL } from './config';
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  error?: string;
+  message?: string;
+}
+
+export interface AdminSettings {
+  hasPassword: boolean;
+}
+
+export interface StorageSettings {
+  mode: 'local' | 'oss';
+  local?: {
+    uploadDir: string;
+    publicUrl: string;
+  };
+  oss?: {
+    provider?: 'aliyun' | 'tencent'; // OSS 提供商
+    region: string;
+    accessKeyId: string;
+    accessKeySecret: string;
+    bucket: string;
+    endpoint?: string;
+    roleArn?: string;
+    roleSessionName?: string;
+  };
+  server?: {
+    port: string;
+  };
+  frontend?: {
+    apiBaseUrl: string;
+  };
+}
+
+export interface GallerySettings {
+  randomizePhotos: boolean;
+}
+
+class SettingsService {
+  /**
+   * 获取管理员设置
+   */
+  async getAdminSettings(): Promise<AdminSettings> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/admin`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: ApiResponse<AdminSettings> = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '获取管理员设置失败');
+      }
+
+      return result.data;
+    } catch (error) {
+      console.error('获取管理员设置失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新管理员密码
+   */
+  async updatePassword(currentPassword: string, newPassword: string): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/admin/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '更新密码失败');
+      }
+
+      const result: ApiResponse<void> = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '更新密码失败');
+      }
+    } catch (error) {
+      console.error('更新密码失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取存储设置
+   */
+  async getStorageSettings(): Promise<StorageSettings> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/storage`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: ApiResponse<StorageSettings> = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '获取存储设置失败');
+      }
+
+      return result.data;
+    } catch (error) {
+      console.error('获取存储设置失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新存储设置
+   */
+  async updateStorageSettings(settings: StorageSettings): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/storage`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '更新存储设置失败');
+      }
+
+      const result: ApiResponse<void> = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '更新存储设置失败');
+      }
+    } catch (error) {
+      console.error('更新存储设置失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取图库设置
+   */
+  async getGallerySettings(): Promise<GallerySettings> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/gallery`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: ApiResponse<GallerySettings> = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '获取图库设置失败');
+      }
+
+      return result.data;
+    } catch (error) {
+      console.error('获取图库设置失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新图库设置
+   */
+  async updateGallerySettings(settings: GallerySettings): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/gallery`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '更新图库设置失败');
+      }
+
+      const result: ApiResponse<void> = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '更新图库设置失败');
+      }
+    } catch (error) {
+      console.error('更新图库设置失败:', error);
+      throw error;
+    }
+  }
+}
+
+export const settingsService = new SettingsService();
+

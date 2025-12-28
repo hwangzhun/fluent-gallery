@@ -1,0 +1,65 @@
+数据库表关系图
+================
+
+┌─────────────────────────────────────┐
+│           photos 表                  │
+├─────────────────────────────────────┤
+│ id (TEXT, PK)                        │
+│ url (TEXT)                           │
+│ thumbnail_url (TEXT)                 │
+│ title (TEXT)                         │
+│ description (TEXT, nullable)         │
+│ year (INTEGER) ──┐                   │
+│ width (INTEGER)  │                   │
+│ height (INTEGER) │                   │
+│ exif (TEXT, JSON)│                   │
+│ created_at (TEXT)│                   │
+│ updated_at (TEXT)│                   │
+└──────────────────┼───────────────────┘
+                   │
+                   │ 1:N
+                   │
+┌──────────────────▼───────────────────┐
+│        photo_tags 表                  │
+│        (关联表)                       │
+├─────────────────────────────────────┤
+│ photo_id (TEXT, FK) ────┐            │
+│ tag_id (INTEGER, FK) ───┼───┐        │
+│ PRIMARY KEY (photo_id,   │   │        │
+│              tag_id)     │   │        │
+└──────────────────────────┼───┼────────┘
+                           │   │
+                           │   │ N:1
+                           │   │
+                           │   │
+┌──────────────────────────▼───▼────────┐
+│           tags 表                     │
+├─────────────────────────────────────┤
+│ id (INTEGER, PK, AUTOINCREMENT)      │
+│ name (TEXT, UNIQUE)                  │
+│ created_at (TEXT)                    │
+└─────────────────────────────────────┘
+
+
+关系说明：
+---------
+1. photos (1) ──< photo_tags (N) ──> (1) tags
+   - 一张照片可以有多个标签
+   - 一个标签可以关联多张照片
+   - 多对多关系通过 photo_tags 表实现
+
+2. 级联删除：
+   - 删除照片时，自动删除关联的 photo_tags 记录
+   - 删除标签时，自动删除关联的 photo_tags 记录
+
+查询示例：
+---------
+1. 获取照片及其所有标签：
+   photos → photo_tags → tags
+
+2. 通过标签查找照片：
+   tags → photo_tags → photos
+
+3. 通过年份查找照片：
+   直接在 photos 表查询 year 字段
+
