@@ -26,7 +26,7 @@ git clone https://github.com/hwangzhun/fluent-gallery.git
 cd fluent-gallery
 npm install
 cp .env.example .env
-npm run dev:full
+npm run dev
 ```
 
 启动后访问：
@@ -56,9 +56,10 @@ npm run dev:full
 ## 常用命令
 
 ```bash
-npm run dev          # 仅启动前端
+npm run dev          # 同时启动前端与 API 服务
+npm run dev:client   # 仅启动前端
 npm run dev:server   # 仅启动 API 服务
-npm run dev:full     # 同时启动前端与 API 服务
+npm run dev:full     # npm run dev 的兼容别名
 npm test             # 运行测试
 npm run build        # 构建前端
 npm run preview      # 预览前端构建结果
