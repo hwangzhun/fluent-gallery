@@ -1,50 +1,90 @@
 import React, { useEffect, useState } from 'react';
-import { Photo } from '../types';
+import { ArrowDown, ArrowUpRight, ArrowUp, RotateCcw } from 'lucide-react';
+import { FilterState, Photo } from '../types';
 import { PhotoCard } from './PhotoCard';
+import { PhotoImage } from './PhotoImage';
 import { Lightbox } from './Lightbox';
+import { GalleryFilters } from './GalleryFilters';
+import type { GallerySettings } from '../services/settingsService';
 
 interface MasonryGalleryProps {
   photos: Photo[];
+  loading: boolean;
+  error: string | null;
+  filter: FilterState;
+  gallerySettings: GallerySettings;
+  onFilterChange: (filter: Partial<FilterState>) => void;
+  onRetry: () => void;
 }
 
-export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos }) => {
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
-
-  // Close lightbox on escape key is handled in Lightbox component
-  
-  if (photos.length === 0) {
-    return (
-        <div className="flex flex-col items-center justify-center h-[50vh] text-gray-400">
-            <p className="text-lg">未找到符合条件的照片。</p>
-        </div>
-    );
+function shufflePhotos(items: Photo[]): Photo[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const nextIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[nextIndex]] = [shuffled[nextIndex], shuffled[index]];
   }
+  return shuffled;
+}
+
+export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, loading, error, filter, gallerySettings, onFilterChange, onRetry }) => {
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [compact, setCompact] = useState(false);
+  const [displayPhotos, setDisplayPhotos] = useState<Photo[]>(photos);
+  // Keep the opening artwork stable while visitors explore the collection filters.
+  const [featured, setFeatured] = useState<Photo | null>(null);
+  useEffect(() => {
+    if (!loading && !error && filter.tag === null && filter.year === null) {
+      setFeatured(current => {
+        const configured = gallerySettings.heroPhotoId ? photos.find(photo => photo.id === gallerySettings.heroPhotoId) : null;
+        return configured ?? photos.find(photo => photo.id === current?.id) ?? photos.find(photo => photo.width >= photo.height) ?? photos[0] ?? null;
+      });
+    }
+  }, [photos, loading, error, filter.tag, filter.year, gallerySettings.heroPhotoId]);
+  useEffect(() => {
+    setDisplayPhotos(gallerySettings.randomizePhotos && filter.tag === null && filter.year === null ? shufflePhotos(photos) : photos);
+  }, [photos, filter.tag, filter.year, gallerySettings.randomizePhotos]);
+  const selectedPhoto = displayPhotos.find(photo => photo.id === selectedPhotoId) ?? (featured?.id === selectedPhotoId ? featured : null);
+  const selectedIndex = displayPhotos.findIndex(photo => photo.id === selectedPhotoId);
 
   return (
-    <>
-      <div className="p-4 sm:p-6 lg:p-8">
-        {/* CSS Columns Approach: Simple and effective for masonry */}
-        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-          {photos.map((photo, index) => (
-            <PhotoCard 
-                key={photo.id} 
-                photo={photo} 
-                onClick={() => setSelectedPhotoIndex(index)} 
-            />
-          ))}
+    <main>
+      <section className="gallery-hero gallery-container" aria-labelledby="gallery-heading">
+        <div className="gallery-hero-copy">
+          <p className="gallery-eyebrow"><span /> A PERSONAL PHOTOGRAPHIC JOURNAL</p>
+          <h1 id="gallery-heading">把日常，<br />留在<span className="gallery-title-accent">光</span>里。</h1>
+          <p className="gallery-hero-english">The poetry of<br /><em>ordinary moments.</em></p>
+          <p className="gallery-hero-description">一些走过的地方，一些停下的瞬间。<br />在光影之间，收藏日常的另一种模样。</p>
+          <button className="gallery-explore" onClick={() => document.getElementById('collection')?.scrollIntoView({ behavior: 'smooth' })}>慢慢看，慢慢发现 <span><ArrowDown size={17} strokeWidth={1.3} /></span></button>
         </div>
-      </div>
+        <div className="gallery-hero-art">
+          <div className="gallery-hero-edition"><span>IN THE FRAME</span><span>{featured?.year ?? '光影之间'}</span></div>
+          <figure>
+            {featured ? <button className={`gallery-featured-frame is-${gallerySettings.heroImageFit}`} onClick={() => setSelectedPhotoId(featured.id)} aria-label={`查看封面作品：${featured.title}`}><PhotoImage key={featured.url} photo={featured} original priority /><span className="gallery-featured-open"><ArrowUpRight size={18} /></span></button> : <div className="gallery-featured-placeholder" aria-label={loading ? '正在准备展览' : '等待第一幅作品'}><span>{loading ? '正在准备展览' : '光影，静待发生。'}</span></div>}
+            <figcaption><span><i aria-hidden="true" />{featured ? featured.title : 'FLUENT GALLERY'}</span><span>{featured?.exif?.author || '光影中的日常'}</span></figcaption>
+          </figure>
+          <span className="gallery-hero-side-note" aria-hidden="true">A MOMENT, KEPT FOREVER.</span>
+        </div>
+      </section>
 
-      {selectedPhotoIndex !== null && (
-        <Lightbox
-          photo={photos[selectedPhotoIndex]}
-          onClose={() => setSelectedPhotoIndex(null)}
-          onNext={() => setSelectedPhotoIndex((prev) => (prev !== null && prev < photos.length - 1 ? prev + 1 : prev))}
-          onPrev={() => setSelectedPhotoIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
-          hasNext={selectedPhotoIndex < photos.length - 1}
-          hasPrev={selectedPhotoIndex > 0}
-        />
-      )}
-    </>
+      <section id="collection" className="gallery-collection gallery-container" aria-labelledby="collection-heading">
+        <div className="gallery-section-heading"><div><p className="gallery-eyebrow">THE COLLECTION</p><h2 id="collection-heading">光影拾集 <span>Selected works</span></h2></div><p className="gallery-count" role="status">{loading ? '正在整理作品…' : error ? '展览暂时未能载入' : <><span>{String(photos.length).padStart(2, '0')}</span> 幅作品 · 每一幅，都是一次停留</>}</p></div>
+        <GalleryFilters filter={filter} onFilterChange={onFilterChange} compact={compact} onCompactChange={setCompact} />
+        <div aria-busy={loading}>
+          {error ? <div className="gallery-empty" role="alert"><p className="gallery-eyebrow">A LITTLE PAUSE</p><h3>展览暂时未能载入</h3><p>{error}</p><button onClick={onRetry}><RotateCcw size={14} />重新加载</button></div>
+            : loading ? <div className="gallery-grid gallery-skeleton" aria-label="正在加载作品">{[0, 1, 2].map(index => <div key={index} className="gallery-skeleton-item" />)}</div>
+              : photos.length === 0 ? <div className="gallery-empty"><p className="gallery-eyebrow">ROOM FOR SOMETHING NEW</p><h3>{filter.tag || filter.year ? '这一页，暂时留白。' : '等待第一束光。'}</h3><p>{filter.tag || filter.year ? '换一个主题或年份，继续寻找喜欢的瞬间。' : '作品上传后，将在这里慢慢展开。'}</p>{(filter.tag || filter.year) && <button onClick={() => onFilterChange({ year: null, tag: null })}>查看全部作品 <ArrowUpRight size={15} /></button>}</div>
+                : <div className={`gallery-grid ${compact ? 'is-compact' : ''}`}>{displayPhotos.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} onClick={() => setSelectedPhotoId(photo.id)} />)}</div>}
+        </div>
+        {!loading && !error && photos.length > 0 && <div className="gallery-endnote"><span /><p>目光停留的地方，故事还在继续。</p><span /></div>}
+      </section>
+
+      <footer id="gallery-note" className="gallery-footer gallery-container">
+        <div className="gallery-footer-note"><p className="gallery-eyebrow">A NOTE FROM THE GALLERY</p><p>世界很快，<br /><span>我们慢慢看。</span></p><div>摄影是与日常的一场温柔对话。<br />谢谢你在这里，为一个瞬间停留。</div></div>
+        <div className="gallery-footer-signature"><span className="gallery-footer-wordmark">Fluent<span> Gallery.</span></span><p>A small collection of things worth seeing.</p><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>回到开始 <ArrowUp size={15} /></button></div>
+        <div className="gallery-footer-bottom"><span>© {new Date().getFullYear()} Fluent Gallery</span><span>以影像，珍藏所见。</span><span>MADE OF LIGHT & TIME</span></div>
+      </footer>
+
+      {selectedPhoto && <Lightbox photo={selectedPhoto} onClose={() => setSelectedPhotoId(null)} onNext={() => { if (selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1) setSelectedPhotoId(displayPhotos[selectedIndex + 1].id); }} onPrev={() => { if (selectedIndex > 0) setSelectedPhotoId(displayPhotos[selectedIndex - 1].id); }} hasNext={selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1} hasPrev={selectedIndex > 0} position={selectedIndex >= 0 ? selectedIndex + 1 : undefined} total={displayPhotos.length} />}
+    </main>
   );
 };

@@ -1,7 +1,7 @@
 /**
  * 日志服务（前端）
  */
-import { API_BASE_URL } from './config';
+import { API_BASE_URL, apiFetch } from './config';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -30,7 +30,6 @@ export interface LogFile {
   name: string;
   size: number;
   mtime: string;
-  path: string;
 }
 
 class LogService {
@@ -57,7 +56,7 @@ class LogService {
       if (options?.endTime) params.append('endTime', options.endTime);
 
       const url = `${API_BASE_URL}/logs${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -81,7 +80,7 @@ class LogService {
    */
   async getLogFiles(): Promise<LogFile[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/logs/files`);
+      const response = await apiFetch('/logs/files');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -119,7 +118,7 @@ class LogService {
       if (options?.endTime) params.append('endTime', options.endTime);
 
       const url = `${API_BASE_URL}/logs/export${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -143,6 +142,7 @@ class LogService {
       const url = `${API_BASE_URL}/logs/clear${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, {
         method: 'DELETE'
+        , credentials: 'include'
       });
 
       if (!response.ok) {
@@ -162,4 +162,3 @@ class LogService {
 }
 
 export const logService = new LogService();
-

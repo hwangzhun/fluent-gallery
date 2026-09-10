@@ -6,12 +6,18 @@ interface TagSelectorProps {
   value: string; // 逗号分隔的标签字符串
   onChange: (tags: string) => void;
   placeholder?: string;
+  disabled?: boolean;
+  labelAction?: React.ReactNode;
+  resetKey?: string;
 }
 
 export const TagSelector: React.FC<TagSelectorProps> = ({ 
   value, 
   onChange, 
-  placeholder = "输入标签或从列表选择..." 
+  placeholder = "输入标签或从列表选择...",
+  disabled = false,
+  labelAction,
+  resetKey,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -59,6 +65,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
 
   // 添加标签
   const addTag = async (tagName: string) => {
+    if (disabled) return;
     const trimmed = tagName.trim();
     if (!trimmed || currentTags.includes(trimmed)) {
       return;
@@ -84,6 +91,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
 
   // 删除标签
   const removeTag = (tagToRemove: string) => {
+    if (disabled) return;
     const newTags = currentTags.filter(tag => tag !== tagToRemove);
     onChange(newTags.join(', '));
   };
@@ -128,6 +136,16 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
 
   // 点击外部关闭建议列表
   useEffect(() => {
+    if (disabled) setShowSuggestions(false);
+  }, [disabled]);
+
+  useEffect(() => {
+    setInputValue('');
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
+  }, [resetKey]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         suggestionsRef.current &&
@@ -155,7 +173,14 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
 
   return (
     <div className="relative">
-      <label className="block text-sm font-medium text-gray-700 mb-1">标签</label>
+      {labelAction ? (
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <label className="text-sm font-medium text-gray-700">标签</label>
+          {labelAction}
+        </div>
+      ) : (
+        <label className="block text-sm font-medium text-gray-700 mb-1">标签</label>
+      )}
       
       {/* 已选标签显示 */}
       {currentTags.length > 0 && (
@@ -170,6 +195,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
               <button
                 type="button"
                 onClick={() => removeTag(tag)}
+                disabled={disabled}
                 className="hover:text-blue-900 transition-colors"
               >
                 <X size={14} />
@@ -190,7 +216,8 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
           onKeyDown={handleKeyDown}
           onFocus={() => setShowSuggestions(inputValue.trim().length > 0 || suggestions.length > 0)}
           placeholder={placeholder}
-          className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-500"
+          disabled={disabled}
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
         />
       </div>
 
@@ -207,6 +234,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
                   key={tag}
                   type="button"
                   onClick={() => handleSuggestionClick(tag)}
+                  disabled={disabled}
                   className={`w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors ${
                     index === selectedIndex ? 'bg-blue-50' : ''
                   }`}
@@ -225,6 +253,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
               <button
                 type="button"
                 onClick={() => addTag(inputValue)}
+                disabled={disabled}
                 className="w-full text-left px-4 py-2 hover:bg-green-50 transition-colors text-green-700"
               >
                 <div className="flex items-center gap-2">
@@ -253,6 +282,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
+                disabled={disabled}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 rounded-md text-sm border border-gray-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-all cursor-pointer"
               >
                 <Tag size={12} />
@@ -271,4 +301,3 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
     </div>
   );
 };
-

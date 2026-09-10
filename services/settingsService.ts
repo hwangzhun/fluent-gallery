@@ -1,7 +1,7 @@
 /**
  * 设置服务（前端）
  */
-import { API_BASE_URL } from './config';
+import { API_BASE_URL, apiFetch } from './config';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -23,8 +23,10 @@ export interface StorageSettings {
   oss?: {
     provider?: 'aliyun' | 'tencent'; // OSS 提供商
     region: string;
-    accessKeyId: string;
-    accessKeySecret: string;
+    accessKeyId?: string;
+    accessKeySecret?: string;
+    hasAccessKeyId?: boolean;
+    hasAccessKeySecret?: boolean;
     bucket: string;
     endpoint?: string;
     roleArn?: string;
@@ -40,6 +42,8 @@ export interface StorageSettings {
 
 export interface GallerySettings {
   randomizePhotos: boolean;
+  heroPhotoId: string | null;
+  heroImageFit: 'contain' | 'cover';
 }
 
 class SettingsService {
@@ -48,7 +52,7 @@ class SettingsService {
    */
   async getAdminSettings(): Promise<AdminSettings> {
     try {
-      const response = await fetch(`${API_BASE_URL}/settings/admin`);
+      const response = await apiFetch('/settings/admin');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -72,7 +76,7 @@ class SettingsService {
    */
   async updatePassword(currentPassword: string, newPassword: string): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/settings/admin/password`, {
+      const response = await apiFetch('/settings/admin/password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -101,7 +105,7 @@ class SettingsService {
    */
   async getStorageSettings(): Promise<StorageSettings> {
     try {
-      const response = await fetch(`${API_BASE_URL}/settings/storage`);
+      const response = await apiFetch('/settings/storage');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -125,7 +129,7 @@ class SettingsService {
    */
   async updateStorageSettings(settings: StorageSettings): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/settings/storage`, {
+      const response = await apiFetch('/settings/storage', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -154,7 +158,7 @@ class SettingsService {
    */
   async getGallerySettings(): Promise<GallerySettings> {
     try {
-      const response = await fetch(`${API_BASE_URL}/settings/gallery`);
+      const response = await apiFetch('/settings/gallery');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -178,7 +182,7 @@ class SettingsService {
    */
   async updateGallerySettings(settings: GallerySettings): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/settings/gallery`, {
+      const response = await apiFetch('/settings/gallery', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -204,4 +208,3 @@ class SettingsService {
 }
 
 export const settingsService = new SettingsService();
-

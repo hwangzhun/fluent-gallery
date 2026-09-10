@@ -207,8 +207,7 @@ router.get('/files', async (req, res) => {
         return {
           name: file,
           size: stats.size,
-          mtime: stats.mtime.toISOString(),
-          path: filePath
+          mtime: stats.mtime.toISOString()
         };
       })
       .sort((a, b) => new Date(b.mtime).getTime() - new Date(a.mtime).getTime());
@@ -358,4 +357,3 @@ router.delete('/clear', async (req, res) => {
 });
 
 export default router;
-

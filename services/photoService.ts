@@ -1,5 +1,6 @@
 import { Photo } from '../types';
-import { API_BASE_URL } from './config';
+import { PhotoWithTags } from '../database/types';
+import { API_BASE_URL, apiFetch } from './config';
 import { dbPhotoToPhoto, photoToCreateInput } from './utils';
 
 interface ApiResponse<T> {
@@ -9,7 +10,28 @@ interface ApiResponse<T> {
   message?: string;
 }
 
+export interface AdminPhotoPage {
+  items: Photo[];
+  total: number;
+  page: number;
+  pageSize: 30 | 60 | 120;
+  totalPages: number;
+}
+
+export type AdminPhotoSort = 'latest' | 'likes' | 'views';
+
 class PhotoService {
+  async getAdminPhotos(options: { page: number; pageSize: 30 | 60 | 120; year?: number; tags?: string[]; search?: string; sort?: AdminPhotoSort; signal?: AbortSignal }): Promise<AdminPhotoPage> {
+    const params = new URLSearchParams({ page: String(options.page), pageSize: String(options.pageSize), sort: options.sort || 'latest' });
+    if (options.year) params.set('year', String(options.year));
+    if (options.tags?.length) params.set('tags', options.tags.join(','));
+    if (options.search) params.set('search', options.search);
+    const response = await apiFetch(`/photos/admin?${params}`, { signal: options.signal });
+    const result: ApiResponse<{ items: PhotoWithTags[]; total: number; page: number; pageSize: 30 | 60 | 120; totalPages: number }> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '获取后台照片失败');
+    return { ...result.data, items: result.data.items.map(dbPhotoToPhoto) };
+  }
+
   /**
    * 获取所有照片（支持筛选和搜索）
    */
@@ -42,7 +64,7 @@ class PhotoService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result: ApiResponse<Photo[]> = await response.json();
+      const result: ApiResponse<PhotoWithTags[]> = await response.json();
       
       if (!result.success) {
         throw new Error(result.error || '获取照片失败');
@@ -70,7 +92,7 @@ class PhotoService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result: ApiResponse<Photo> = await response.json();
+      const result: ApiResponse<PhotoWithTags> = await response.json();
       
       if (!result.success) {
         throw new Error(result.error || '获取照片失败');
@@ -91,7 +113,7 @@ class PhotoService {
   async uploadPhoto(
     url: string,
     thumbnailUrl: string,
-    metadata: Omit<Photo, 'id' | 'url' | 'thumbnailUrl' | 'createdAt'>
+    metadata: Omit<Photo, 'id' | 'url' | 'thumbnailUrl' | 'createdAt' | 'likesCount' | 'viewsCount' | 'isLiked'>
   ): Promise<Photo> {
     try {
       const input = photoToCreateInput({
@@ -100,7 +122,7 @@ class PhotoService {
         thumbnailUrl
       });
 
-      const response = await fetch(`${API_BASE_URL}/photos`, {
+      const response = await apiFetch('/photos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -112,7 +134,7 @@ class PhotoService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result: ApiResponse<Photo> = await response.json();
+      const result: ApiResponse<PhotoWithTags> = await response.json();
       
       if (!result.success) {
         throw new Error(result.error || '上传照片失败');
@@ -142,7 +164,7 @@ class PhotoService {
       if (updates.exif !== undefined) input.exif = updates.exif;
       if (updates.tags !== undefined) input.tags = updates.tags;
 
-      const response = await fetch(`${API_BASE_URL}/photos/${id}`, {
+      const response = await apiFetch(`/photos/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -157,7 +179,7 @@ class PhotoService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result: ApiResponse<Photo> = await response.json();
+      const result: ApiResponse<PhotoWithTags> = await response.json();
       
       if (!result.success) {
         throw new Error(result.error || '更新照片失败');
@@ -175,7 +197,7 @@ class PhotoService {
    */
   async deletePhoto(id: string): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/photos/${id}`, {
+      const response = await apiFetch(`/photos/${id}`, {
         method: 'DELETE'
       });
 

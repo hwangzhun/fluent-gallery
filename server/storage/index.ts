@@ -4,7 +4,7 @@
 import { deleteOSSFile, extractPathFromOSSUrl } from './oss';
 import { storageConfig } from './config';
 import { unlinkSync, existsSync } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join } from 'path';
 
 /**
  * 判断 URL 是否为 OSS URL
@@ -61,7 +61,8 @@ export async function deleteFile(url: string): Promise<void> {
       }
       
       // 构建完整路径
-      const fullPath = join(process.cwd(), storageConfig.local.uploadDir.replace('./', ''), filePath);
+      const uploadRoot = isAbsolute(storageConfig.local.uploadDir) ? storageConfig.local.uploadDir : join(process.cwd(), storageConfig.local.uploadDir.replace('./', ''));
+      const fullPath = join(uploadRoot, filePath);
       
       // 检查文件是否存在并删除
       if (existsSync(fullPath)) {

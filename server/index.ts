@@ -9,6 +9,7 @@ import settingsRoutes from './routes/settings';
 import logsRoutes from './routes/logs';
 import likeRoutes from './routes/likes';
 import viewRoutes from './routes/views';
+import authRoutes, { ensureAuthSchema, requireAdmin } from './auth';
 import { storageConfig, refreshStorageConfig } from './storage/config';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
@@ -17,7 +18,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // 中间件
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+app.use(cors({
+  credentials: true,
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('不允许的跨域来源'));
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -42,10 +53,12 @@ app.use('/api/photos', likeRoutes); // 点赞路由（挂载在 /api/photos 下�
 app.use('/api/photos', viewRoutes); // 浏览量路由（挂载在 /api/photos 下）
 app.use('/api/photos', photoRoutes);
 app.use('/api/tags', tagRoutes);
-app.use('/api/oss', ossRoutes);
-app.use('/api/upload', uploadRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/oss', requireAdmin, ossRoutes);
+app.use('/api/upload', requireAdmin, uploadRoutes);
+// 图库的公开展示设置由路由自行控制权限，其他设置仍需要管理员会话。
 app.use('/api/settings', settingsRoutes);
-app.use('/api/logs', logsRoutes);
+app.use('/api/logs', requireAdmin, logsRoutes);
 
 // 404 处理
 app.use((req, res) => {
@@ -66,6 +79,7 @@ async function startServer() {
   try {
     // 初始化数据库
     await initDatabase();
+    await ensureAuthSchema();
     console.log('✅ 数据库初始化完成');
 
     // 从数据库刷新存储配置
@@ -92,4 +106,3 @@ process.on('SIGINT', async () => {
   await closeDatabase();
   process.exit(0);
 });
-

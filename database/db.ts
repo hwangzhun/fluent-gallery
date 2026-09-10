@@ -8,8 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // 数据库文件路径
-const DB_DIR = join(__dirname, '../data');
-const DB_PATH = join(DB_DIR, 'gallery.db');
+const DB_PATH = process.env.GALLERY_DB_PATH || join(__dirname, '../data/gallery.db');
+const DB_DIR = dirname(DB_PATH);
 
 // 确保数据目录存在
 if (!existsSync(DB_DIR)) {
@@ -128,6 +128,9 @@ export async function initDatabase(): Promise<void> {
             console.log('📝 检测到需要迁移：添加 views_count 字段');
             await addColumnToPhotos('views_count', 'INTEGER NOT NULL DEFAULT 0');
           }
+
+          await dbRun('CREATE INDEX IF NOT EXISTS idx_photos_likes_count ON photos(likes_count)');
+          await dbRun('CREATE INDEX IF NOT EXISTS idx_photos_views_count ON photos(views_count)');
           
           // 确保 photo_likes 表存在
           const photoLikesExists = await new Promise<boolean>((resolve) => {
@@ -382,4 +385,3 @@ export function dbAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
     });
   });
 }
-

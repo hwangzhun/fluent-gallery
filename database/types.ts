@@ -13,6 +13,8 @@ export interface PhotoEntity {
   width: number;
   height: number;
   exif: string | null; // JSON 字符串
+  likes_count: number;
+  views_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -39,8 +41,10 @@ export interface PhotoTagEntity {
  */
 export interface PhotoWithTags extends PhotoEntity {
   tags: string[]; // 标签名称数组
-  likes_count?: number; // 点赞数（可选，因为可能是旧数据）
-  views_count?: number; // 浏览量（可选，因为可能是旧数据）
+}
+
+export interface TagWithCountEntity extends TagEntity {
+  photo_count: number;
 }
 
 /**
@@ -88,4 +92,3 @@ export interface UpdatePhotoInput {
   exif?: ExifInfo;
   tags?: string[]; // 标签名称数组
 }
-

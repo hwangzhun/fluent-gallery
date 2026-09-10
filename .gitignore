@@ -1,30 +1,53 @@
-# Logs
-logs
+# Dependencies
+node_modules/
+
+# Build output and caches
+dist/
+dist-ssr/
+coverage/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Runtime data (database files and uploaded photos)
+/data/
+/uploads/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs and diagnostics
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+*.pid
+*.pid.lock
 
-node_modules
-dist
-dist-ssr
-*.local
+# Test artifacts
+.nyc_output/
 
-# Database
-data/
-*.db
-*.db-shm
-*.db-wal
-
-# Editor directories and files
+# Editor and OS files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary files
+*.tmp
+*.temp

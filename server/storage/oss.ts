@@ -33,10 +33,9 @@ export async function getOSSClient(): Promise<OSSClient> {
     return new COS({
       SecretId: accessKeyId,
       SecretKey: accessKeySecret,
-      Region: region,
       // 如果提供了 endpoint，使用自定义 endpoint
       // 否则 SDK 会根据 region 自动构建
-    });
+    } as any);
   } else {
     // 阿里云 OSS（默认）
     const ossConfig: any = {

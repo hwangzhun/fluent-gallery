@@ -26,8 +26,8 @@ export function dbPhotoToPhoto(dbPhoto: PhotoWithTags): Photo {
     width: dbPhoto.width,
     height: dbPhoto.height,
     createdAt: dbPhoto.created_at,
-    likesCount: (dbPhoto as any).likes_count || 0,
-    viewsCount: (dbPhoto as any).views_count || 0,
+    likesCount: dbPhoto.likes_count || 0,
+    viewsCount: dbPhoto.views_count || 0,
     exif
   };
 }
@@ -35,7 +35,7 @@ export function dbPhotoToPhoto(dbPhoto: PhotoWithTags): Photo {
 /**
  * 将前端 Photo 类型转换为创建照片的输入数据
  */
-export function photoToCreateInput(photo: Omit<Photo, 'id' | 'createdAt'>): {
+export function photoToCreateInput(photo: Omit<Photo, 'id' | 'createdAt' | 'likesCount' | 'viewsCount' | 'isLiked'>): {
   url: string;
   thumbnail_url: string;
   title: string;
@@ -58,4 +58,3 @@ export function photoToCreateInput(photo: Omit<Photo, 'id' | 'createdAt'>): {
     tags: photo.tags
   };
 }
-

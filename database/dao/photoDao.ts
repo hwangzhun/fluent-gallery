@@ -1,10 +1,106 @@
 import { dbRun, dbGet, dbAll } from '../db';
 import type { PhotoEntity, PhotoWithTags, CreatePhotoInput, UpdatePhotoInput, ExifInfo } from '../types';
 
+export type PhotoSort = 'latest' | 'likes' | 'views';
+
 /**
  * 照片数据访问对象
  */
 export class PhotoDao {
+  private buildPhotoFilter(options: { year?: number; tags?: string[]; search?: string } = {}) {
+    const where: string[] = [];
+    const params: unknown[] = [];
+
+    if (options.year) {
+      where.push('p.year = ?');
+      params.push(options.year);
+    }
+
+    if (options.search?.trim()) {
+      const term = `%${options.search.trim().toLowerCase()}%`;
+      where.push(`(
+        LOWER(p.title) LIKE ? OR LOWER(COALESCE(p.description, '')) LIKE ? OR LOWER(COALESCE(p.exif, '')) LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM photo_tags search_pt INNER JOIN tags search_t ON search_t.id = search_pt.tag_id
+          WHERE search_pt.photo_id = p.id AND LOWER(search_t.name) LIKE ?
+        )
+      )`);
+      params.push(term, term, term, term);
+    }
+
+    const tags = [...new Set((options.tags || []).filter(Boolean))];
+    if (tags.length > 0) {
+      const placeholders = tags.map(() => '?').join(', ');
+      where.push(`p.id IN (
+        SELECT pt.photo_id FROM photo_tags pt INNER JOIN tags t ON t.id = pt.tag_id
+        WHERE t.name IN (${placeholders}) GROUP BY pt.photo_id
+        HAVING COUNT(DISTINCT t.name) = ?
+      )`);
+      params.push(...tags, tags.length);
+    }
+
+    return { clause: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
+  }
+
+  private async attachTags(photos: PhotoEntity[]): Promise<PhotoWithTags[]> {
+    if (photos.length === 0) return [];
+    const ids = photos.map(photo => photo.id);
+    const tagRows = await dbAll<{ photo_id: string; name: string }>(
+      `SELECT pt.photo_id, t.name FROM photo_tags pt
+       INNER JOIN tags t ON t.id = pt.tag_id
+       WHERE pt.photo_id IN (${ids.map(() => '?').join(', ')})
+       ORDER BY t.name ASC`,
+      ids
+    );
+    const tagsByPhoto = new Map<string, string[]>();
+    tagRows.forEach(({ photo_id, name }) => tagsByPhoto.set(photo_id, [...(tagsByPhoto.get(photo_id) || []), name]));
+    return photos.map(photo => ({ ...photo, tags: tagsByPhoto.get(photo.id) || [] }));
+  }
+
+  /**
+   * 组合筛选照片。多个标签采用 AND 语义：结果必须同时具备全部标签。
+   * 标签使用一次批量查询回填，避免列表读取时的 N+1 查询。
+   */
+  async getPhotos(options: { year?: number; tags?: string[]; search?: string } = {}): Promise<PhotoWithTags[]> {
+    const filter = this.buildPhotoFilter(options);
+    const photos = await dbAll<PhotoEntity>(
+      `SELECT p.* FROM photos p ${filter.clause} ORDER BY p.created_at DESC, p.id DESC`,
+      filter.params as any[]
+    );
+    return this.attachTags(photos);
+  }
+
+  async getPhotosPage(options: { page: number; pageSize: number; year?: number; tags?: string[]; search?: string; sort?: PhotoSort }) {
+    const filter = this.buildPhotoFilter(options);
+    const orderBy = options.sort === 'likes'
+      ? 'p.likes_count DESC, p.created_at DESC, p.id DESC'
+      : options.sort === 'views'
+        ? 'p.views_count DESC, p.created_at DESC, p.id DESC'
+        : 'p.created_at DESC, p.id DESC';
+    const totalRow = await dbGet<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM photos p ${filter.clause}`,
+      filter.params as any[]
+    );
+    const total = totalRow?.total || 0;
+    const photos = await dbAll<PhotoEntity>(
+      `SELECT p.* FROM photos p ${filter.clause}
+       ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+      [...filter.params, options.pageSize, (options.page - 1) * options.pageSize] as any[]
+    );
+    return {
+      items: await this.attachTags(photos),
+      total,
+      page: options.page,
+      pageSize: options.pageSize,
+      totalPages: total === 0 ? 0 : Math.ceil(total / options.pageSize),
+    };
+  }
+
+  async getAvailableYears(): Promise<number[]> {
+    const rows = await dbAll<{ year: number }>('SELECT DISTINCT year FROM photos ORDER BY year DESC');
+    return rows.map(row => row.year);
+  }
+
   /**
    * 创建照片（包含标签关联）
    */
@@ -297,4 +393,3 @@ export class PhotoDao {
     }
   }
 }
-

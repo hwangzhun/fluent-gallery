@@ -1,115 +1,48 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { MasonryGallery } from './components/MasonryGallery';
-import { AdminDashboard } from './components/AdminDashboard';
 import { photoService } from './services/photoService';
+import { GallerySettings, settingsService } from './services/settingsService';
 import { FilterState, Photo } from './types';
 
-function App() {
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
+
+function PublicGalleryPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [filter, setFilter] = useState<FilterState>({ year: null, tag: null });
+  const [gallerySettings, setGallerySettings] = useState<GallerySettings>({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' });
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
-  // Load photos on mount and when filter changes
   useEffect(() => {
-    const loadPhotos = async () => {
-      setLoading(true);
-      try {
-        const options: { year?: number; tag?: string } = {};
-        if (filter.year) options.year = filter.year;
-        if (filter.tag) options.tag = filter.tag;
-        
-        const data = await photoService.getPhotos(options);
-        setPhotos(data);
-      } catch (error) {
-        console.error("Failed to load photos", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadPhotos();
-  }, [filter]);
+    let active = true;
+    settingsService.getGallerySettings()
+      .then(settings => { if (active) setGallerySettings(settings); })
+      .catch(error => console.error('Failed to load gallery settings', error))
+      .finally(() => { if (active) setSettingsLoading(false); });
+    return () => { active = false; };
+  }, []);
 
-  // Filter Logic (now handled by API, but keep for compatibility)
-  const filteredPhotos = useMemo(() => {
-    return photos;
-  }, [photos]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    photoService.getPhotos({ year: filter.year || undefined, tag: filter.tag || undefined })
+      .then(data => { if (active) setPhotos(data); })
+      .catch(error => { console.error('Failed to load photos', error); if (active) setError('暂时无法连接画廊，请稍后重试。'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [filter, retryVersion]);
 
-  const handleFilterChange = (newFilter: Partial<FilterState>) => {
-    setFilter(prev => ({ ...prev, ...newFilter }));
-  };
-
-  const handleAddPhoto = async (photo: Photo) => {
-    // 照片已通过 API 创建，重新加载列表
-    try {
-      const options: { year?: number; tag?: string } = {};
-      if (filter.year) options.year = filter.year;
-      if (filter.tag) options.tag = filter.tag;
-      const data = await photoService.getPhotos(options);
-      setPhotos(data);
-    } catch (error) {
-      console.error("Failed to reload photos", error);
-    }
-  };
-
-  const handleDeletePhoto = async (id: string) => {
-    try {
-      await photoService.deletePhoto(id);
-      // 重新加载列表
-      const options: { year?: number; tag?: string } = {};
-      if (filter.year) options.year = filter.year;
-      if (filter.tag) options.tag = filter.tag;
-      const data = await photoService.getPhotos(options);
-      setPhotos(data);
-    } catch (error) {
-      console.error("Failed to delete photo", error);
-    }
-  };
-
-  const handleUpdatePhoto = async (photo: Photo) => {
-    // 照片已通过 API 更新，重新加载列表
-    try {
-      const options: { year?: number; tag?: string } = {};
-      if (filter.year) options.year = filter.year;
-      if (filter.tag) options.tag = filter.tag;
-      const data = await photoService.getPhotos(options);
-      setPhotos(data);
-    } catch (error) {
-      console.error("Failed to reload photos", error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f3f3f3]">
-         <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin"></div>
-            <p className="text-gray-500 font-light tracking-wide animate-pulse">加载图库中...</p>
-         </div>
-      </div>
-    );
-  }
-
-  return (
-    <Router>
-      <div className="min-h-screen pb-12">
-        <Navbar filter={filter} onFilterChange={handleFilterChange} />
-        
-        <Routes>
-          <Route path="/" element={<MasonryGallery photos={filteredPhotos} />} />
-          <Route path="/admin" element={
-            <AdminDashboard 
-              photos={photos} 
-              onAddPhoto={handleAddPhoto} 
-              onDeletePhoto={handleDeletePhoto}
-              onUpdatePhoto={handleUpdatePhoto}
-            />
-          } />
-        </Routes>
-      </div>
-    </Router>
-  );
+  return <div className="gallery-shell"><Navbar /><MasonryGallery photos={photos} loading={loading || settingsLoading} error={error} filter={filter} gallerySettings={gallerySettings} onFilterChange={next => setFilter(current => ({ ...current, ...next }))} onRetry={() => setRetryVersion(value => value + 1)} /></div>;
 }
 
-export default App;
+export default function App() {
+  return <Router><Routes>
+    <Route path="/" element={<PublicGalleryPage />} />
+    <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen grid place-items-center bg-slate-100 text-slate-500">正在加载控制台…</div>}><AdminDashboard /></Suspense>} />
+  </Routes></Router>;
+}

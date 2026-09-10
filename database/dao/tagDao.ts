@@ -1,5 +1,5 @@
 import { dbRun, dbGet, dbAll } from '../db';
-import type { TagEntity } from '../types';
+import type { TagEntity, TagWithCountEntity } from '../types';
 
 /**
  * 标签数据访问对象
@@ -53,6 +53,21 @@ export class TagDao {
     );
   }
 
+  async getAllTagsWithPhotoCount(): Promise<TagWithCountEntity[]> {
+    return dbAll<TagWithCountEntity>(
+      `SELECT t.id, t.name, t.created_at, COUNT(pt.photo_id) AS photo_count
+       FROM tags t
+       LEFT JOIN photo_tags pt ON pt.tag_id = t.id
+       GROUP BY t.id, t.name, t.created_at
+       ORDER BY t.name ASC`
+    );
+  }
+
+  async renameTag(id: number, name: string): Promise<TagEntity | null> {
+    const result = await dbRun('UPDATE tags SET name = ? WHERE id = ?', [name, id]);
+    return result.changes > 0 ? this.getTagById(id) : null;
+  }
+
   /**
    * 获取或创建标签（如果不存在则创建）
    */
@@ -80,4 +95,3 @@ export class TagDao {
     return tags.map(t => t.name);
   }
 }
-

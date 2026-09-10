@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS photos (
     width INTEGER NOT NULL,                 -- 图片宽度（像素）
     height INTEGER NOT NULL,                -- 图片高度（像素）
     exif TEXT,                              -- EXIF 信息（JSON 格式存储）
+    likes_count INTEGER NOT NULL DEFAULT 0, -- 累计点赞数
+    views_count INTEGER NOT NULL DEFAULT 0, -- 累计浏览量
     created_at TEXT NOT NULL DEFAULT (datetime('now')),  -- 创建时间（ISO 8601 格式）
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))   -- 更新时间
 );
@@ -22,6 +24,8 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE INDEX IF NOT EXISTS idx_photos_year ON photos(year);              -- 按年份筛选
 CREATE INDEX IF NOT EXISTS idx_photos_created_at ON photos(created_at); -- 按创建时间排序
 CREATE INDEX IF NOT EXISTS idx_photos_title ON photos(title);            -- 按标题搜索（可选）
+CREATE INDEX IF NOT EXISTS idx_photos_likes_count ON photos(likes_count); -- 按点赞数排序
+CREATE INDEX IF NOT EXISTS idx_photos_views_count ON photos(views_count); -- 按浏览量排序
 
 -- ============================================
 -- 2. tags 表 - 标签表
@@ -85,6 +89,23 @@ CREATE INDEX IF NOT EXISTS idx_photo_views_fingerprint ON photo_views(fingerprin
 CREATE INDEX IF NOT EXISTS idx_photo_views_created_at ON photo_views(created_at);
 
 -- ============================================
+-- 6. 后台认证与会话
+-- ============================================
+CREATE TABLE IF NOT EXISTS admin_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions(expires_at);
+
+-- ============================================
 -- 示例数据（可选，用于测试）
 -- ============================================
 -- 插入示例标签
@@ -92,4 +113,3 @@ CREATE INDEX IF NOT EXISTS idx_photo_views_created_at ON photo_views(created_at)
 --     ('Nature'), ('Forest'), ('Landscape'), ('Water'), 
 --     ('Sunset'), ('Ocean'), ('Urban'), ('Architecture'),
 --     ('Portrait'), ('People'), ('Lifestyle'), ('Abstract');
-

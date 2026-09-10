@@ -9,9 +9,9 @@ export interface Photo {
   width: number;
   height: number;
   createdAt: string;
-  likesCount?: number;  // 点赞数
+  likesCount: number;   // 点赞数
   isLiked?: boolean;    // 是否已点赞（前端状态）
-  viewsCount?: number;  // 浏览量
+  viewsCount: number;   // 浏览量
   exif?: {
     camera: string;
     lens: string;

@@ -1,7 +1,7 @@
 /**
  * OSS 服务（前端）
  */
-import { API_BASE_URL } from './config';
+import { API_BASE_URL, apiFetch } from './config';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -35,7 +35,7 @@ class OSSService {
    */
   async getSTSCredentials(): Promise<STSCredentials> {
     try {
-      const response = await fetch(`${API_BASE_URL}/oss/sts`);
+      const response = await apiFetch('/oss/sts');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -59,7 +59,7 @@ class OSSService {
    */
   async getOSSConfig(): Promise<OSSConfig> {
     try {
-      const response = await fetch(`${API_BASE_URL}/oss/config`);
+      const response = await apiFetch('/oss/config');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -158,7 +158,7 @@ export async function uploadToOSSViaProxy(file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/oss/upload`, {
+    const response = await apiFetch('/oss/upload', {
       method: 'POST',
       body: formData
     });

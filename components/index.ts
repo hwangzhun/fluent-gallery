@@ -6,4 +6,13 @@ export { Lightbox } from './Lightbox';
 export { PhotoCard } from './PhotoCard';
 export { TagSelector } from './TagSelector';
 export { PhotoModal } from './PhotoModal';
-
+export type {
+  BatchFieldKey,
+  BatchUploadResult,
+  BatchUploadStatus,
+  ExifData,
+  PhotoFormData,
+  PhotoModalProps,
+  PhotoUploadData,
+  PhotoUploadItem,
+} from './PhotoModal';

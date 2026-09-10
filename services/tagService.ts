@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config';
+import { API_BASE_URL, apiFetch } from './config';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -7,13 +7,28 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-interface Tag {
+export interface Tag {
   id: number;
   name: string;
   created_at: string;
 }
 
+export interface TagWithCount extends Tag {
+  photoCount: number;
+}
+
+async function parseAdminResponse<T>(response: Response, fallback: string): Promise<T> {
+  const result: ApiResponse<T> = await response.json();
+  if (!response.ok || !result.success) throw new Error(result.error || fallback);
+  return result.data;
+}
+
 class TagService {
+  async getAdminTags(): Promise<TagWithCount[]> {
+    const response = await apiFetch('/tags/admin');
+    return parseAdminResponse<TagWithCount[]>(response, '获取标签列表失败');
+  }
+
   /**
    * 获取所有标签
    */
@@ -67,7 +82,7 @@ class TagService {
    */
   async createTag(name: string): Promise<Tag> {
     try {
-      const response = await fetch(`${API_BASE_URL}/tags`, {
+      const response = await apiFetch('/tags', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,30 +107,37 @@ class TagService {
     }
   }
 
+  async renameTag(id: number, name: string): Promise<Tag> {
+    const response = await apiFetch(`/tags/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    return parseAdminResponse<Tag>(response, '标签重命名失败');
+  }
+
+  async deleteTag(id: number): Promise<void> {
+    const response = await apiFetch(`/tags/${id}`, { method: 'DELETE' });
+    await parseAdminResponse<unknown>(response, '删除标签失败');
+  }
+
   /**
    * 获取所有可用的年份（从照片中提取）
    */
   async getAvailableYears(): Promise<number[]> {
     try {
-      // 获取所有照片，然后提取年份
-      const response = await fetch(`${API_BASE_URL}/photos`);
+      const response = await fetch(`${API_BASE_URL}/tags/years`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result: ApiResponse<any[]> = await response.json();
+      const result: ApiResponse<number[]> = await response.json();
       
       if (!result.success) {
-        throw new Error(result.error || '获取照片失败');
+        throw new Error(result.error || '获取年份失败');
       }
-
-      // 从照片中提取所有唯一的年份
-      const years = Array.from(new Set(result.data.map((photo: any) => photo.year)))
-        .filter((year): year is number => typeof year === 'number')
-        .sort((a, b) => b - a); // 降序排列
-
-      return years;
+      return result.data;
     } catch (error) {
       console.error('获取年份列表失败:', error);
       throw error;
@@ -124,4 +146,3 @@ class TagService {
 }
 
 export const tagService = new TagService();
-

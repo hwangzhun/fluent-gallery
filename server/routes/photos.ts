@@ -1,40 +1,31 @@
 import express from 'express';
+import multer from 'multer';
 import { PhotoDao } from '../../database/dao/photoDao';
 import type { CreatePhotoInput, UpdatePhotoInput } from '../../database/types';
 import { deleteFile } from '../storage';
-import { getDatabase } from '../../database/db';
+import { requireAdmin } from '../auth';
+import { processUploadedImage } from '../imageProcessing';
+import { storeProcessedImages } from '../storage/processed';
 
 const router = express.Router();
 const photoDao = new PhotoDao();
+const acceptedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_request, file, callback) => {
+    if (file.mimetype === 'image/gif' || /\.gif$/i.test(file.originalname)) return callback(new Error('不支持 GIF 动图，请转换为 JPEG、PNG、WebP 或 HEIC'));
+    if (!acceptedImageTypes.has(file.mimetype) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.originalname)) return callback(new Error('仅支持 JPEG、PNG、WebP 或 HEIC 图片'));
+    callback(null, true);
+  },
+});
 
-/**
- * 获取图库设置：是否启用图片乱序
- */
-async function getRandomizeSetting(): Promise<boolean> {
-  return new Promise((resolve, reject) => {
-    const db = getDatabase();
-    db.get("SELECT value FROM settings WHERE key = 'gallery_randomize_photos'", (err, row: any) => {
-      if (err) {
-        // 如果查询失败，默认返回 false
-        console.warn('获取乱序设置失败，使用默认值 false:', err);
-        resolve(false);
-        return;
-      }
-      resolve(row?.value === 'true');
-    });
+function receivePhotoFile(request: express.Request, response: express.Response, next: express.NextFunction) {
+  upload.single('file')(request, response, error => {
+    if (!error) return next();
+    const message = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? '单张图片不能超过 50 MB' : error.message;
+    response.status(400).json({ success: false, error: message });
   });
-}
-
-/**
- * 随机打乱数组（Fisher-Yates 洗牌算法）
- */
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
 }
 
 /**
@@ -62,40 +53,7 @@ router.get('/', async (req, res) => {
       tagList = [tag as string];
     }
 
-    let photos;
-
-    // 根据筛选条件获取照片
-    if (yearNum && tagList.length > 0) {
-      // 年份 + 标签（使用第一个标签）
-      photos = await photoDao.getPhotosByYearAndTag(yearNum, tagList[0]);
-    } else if (yearNum) {
-      // 仅年份
-      photos = await photoDao.getPhotosByYear(yearNum);
-    } else if (tagList.length > 0) {
-      // 仅标签（使用第一个标签，多标签暂不支持，需要扩展）
-      photos = await photoDao.getPhotosByTag(tagList[0]);
-    } else {
-      // 获取所有照片
-      photos = await photoDao.getAllPhotos();
-    }
-
-    // 如果有搜索关键词，在前端进行过滤（或者可以在后端实现）
-    // 注意：这里简化处理，实际应该在后端实现搜索功能
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      photos = photos.filter(photo => 
-        photo.title?.toLowerCase().includes(searchLower) ||
-        photo.description?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // 检查是否启用乱序（仅在主页，即无筛选条件时）
-    if (!searchQuery && !yearNum && tagList.length === 0) {
-      const randomizePhotos = await getRandomizeSetting();
-      if (randomizePhotos) {
-        photos = shuffleArray(photos);
-      }
-    }
+    const photos = await photoDao.getPhotos({ year: yearNum || undefined, tags: tagList, search: searchQuery || undefined });
 
     res.json({
       success: true,
@@ -109,6 +67,84 @@ router.get('/', async (req, res) => {
       error: '获取照片列表失败',
       message: error.message
     });
+  }
+});
+
+router.get('/admin', requireAdmin, async (req, res) => {
+  try {
+    const page = Number(req.query.page ?? 1);
+    const pageSize = Number(req.query.pageSize ?? 30);
+    const allowedPageSizes = [30, 60, 120];
+    if (!Number.isInteger(page) || page < 1 || !allowedPageSizes.includes(pageSize)) {
+      return res.status(400).json({ success: false, error: '分页参数无效，page 必须大于 0，pageSize 仅支持 30、60、120' });
+    }
+    const year = req.query.year === undefined ? undefined : Number(req.query.year);
+    if (year !== undefined && (!Number.isInteger(year) || year <= 0)) {
+      return res.status(400).json({ success: false, error: '年份参数无效' });
+    }
+    const tags = typeof req.query.tags === 'string' ? req.query.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [];
+    const sort = typeof req.query.sort === 'string' ? req.query.sort : 'latest';
+    if (!['latest', 'likes', 'views'].includes(sort)) {
+      return res.status(400).json({ success: false, error: '排序参数无效，sort 仅支持 latest、likes、views' });
+    }
+    const data = await photoDao.getPhotosPage({
+      page,
+      pageSize,
+      year,
+      tags,
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      sort: sort as 'latest' | 'likes' | 'views',
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    console.error('获取后台照片列表失败:', error);
+    res.status(500).json({ success: false, error: '获取后台照片列表失败', message: error.message });
+  }
+});
+
+router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, error: '没有上传文件' });
+  let stored: { url: string; thumbnailUrl: string } | null = null;
+  try {
+    const metadata = JSON.parse(req.body.metadata || '{}');
+    const title = typeof metadata.title === 'string' ? metadata.title.trim() : '';
+    const year = Number(metadata.year);
+    if (!title || !Number.isInteger(year) || year <= 0) {
+      return res.status(400).json({ success: false, error: '标题和有效年份为必填项' });
+    }
+    const tags: string[] = Array.isArray(metadata.tags) ? [...new Set<string>(metadata.tags.filter((tag: unknown): tag is string => typeof tag === 'string').map((tag: string) => tag.trim()).filter(Boolean))] : [];
+    const processed = await processUploadedImage(req.file);
+    stored = await storeProcessedImages(processed.display, processed.thumbnail);
+    const photoId = generatePhotoId();
+    await photoDao.createPhoto({
+      url: stored.url,
+      thumbnail_url: stored.thumbnailUrl,
+      title,
+      year,
+      tags,
+      width: processed.width,
+      height: processed.height,
+      exif: metadata.exif && typeof metadata.exif === 'object' ? metadata.exif : undefined,
+    }, photoId);
+    const photo = await photoDao.getPhotoWithTagsById(photoId);
+    res.status(201).json({
+      success: true,
+      data: photo,
+      processing: {
+        sourceBytes: req.file.size,
+        displayBytes: processed.display.length,
+        thumbnailBytes: processed.thumbnail.length,
+        width: processed.width,
+        height: processed.height,
+        format: 'webp',
+      },
+    });
+  } catch (error: any) {
+    if (stored) await Promise.allSettled([deleteFile(stored.url), deleteFile(stored.thumbnailUrl)]);
+    const isInputError = error instanceof SyntaxError || /像素|解码|图片|Input buffer|unsupported/i.test(error.message || '');
+    const publicMessage = error instanceof SyntaxError ? '照片元数据格式无效' : error.message;
+    console.error('处理上传照片失败:', error);
+    res.status(isInputError ? 400 : 500).json({ success: false, error: isInputError ? publicMessage : '上传照片失败', message: error.message });
   }
 });
 
@@ -146,7 +182,7 @@ router.get('/:id', async (req, res) => {
  * POST /api/photos
  * 创建新照片
  */
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const input: CreatePhotoInput = req.body;
 
@@ -186,7 +222,7 @@ router.post('/', async (req, res) => {
  * PUT /api/photos/:id
  * 更新照片
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const input: UpdatePhotoInput = req.body;
@@ -222,7 +258,7 @@ router.put('/:id', async (req, res) => {
  * DELETE /api/photos/:id
  * 删除照片（包括文件）
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -285,4 +321,3 @@ function generatePhotoId(): string {
 }
 
 export default router;
-
