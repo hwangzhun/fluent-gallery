@@ -47,7 +47,8 @@ describe('PhotosPanel thumbnail sizing', () => {
     expect(screen.getByLabelText('浏览 19')).toBeInTheDocument();
     expect(photoService.getAdminPhotos).toHaveBeenCalledWith(expect.objectContaining({ page: 1, sort: 'latest' }));
 
-    fireEvent.change(screen.getByRole('combobox', { name: '照片排序' }), { target: { value: 'views' } });
+    fireEvent.click(screen.getByRole('button', { name: '照片排序' }));
+    fireEvent.click(screen.getByRole('option', { name: '最多浏览' }));
     await act(async () => {});
     expect(photoService.getAdminPhotos).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, sort: 'views' }));
     fireEvent.click(screen.getByRole('button', { name: '网格视图' }));

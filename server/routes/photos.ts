@@ -1,3 +1,4 @@
+import { AlbumInputError } from '../../database/dao/albumDao';
 import express from 'express';
 import multer from 'multer';
 import { PhotoDao } from '../../database/dao/photoDao';
@@ -19,6 +20,22 @@ const upload = multer({
     callback(null, true);
   },
 });
+
+function encodePhotoCursor(cursor: { createdAt: string; id: string } | null): string | null {
+  return cursor ? Buffer.from(JSON.stringify(cursor)).toString('base64url') : null;
+}
+
+function decodePhotoCursor(value: unknown): { createdAt: string; id: string } | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length > 1000) throw new Error('游标参数无效');
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    if (!parsed || typeof parsed.createdAt !== 'string' || typeof parsed.id !== 'string') throw new Error();
+    return { createdAt: parsed.createdAt, id: parsed.id };
+  } catch {
+    throw new Error('游标参数无效');
+  }
+}
 
 function receivePhotoFile(request: express.Request, response: express.Response, next: express.NextFunction) {
   upload.single('file')(request, response, error => {
@@ -70,6 +87,34 @@ router.get('/', async (req, res) => {
   }
 });
 
+/** GET /api/photos/page - 首页游标分页，避免一次读取全部照片。 */
+router.get('/page', async (req, res) => {
+  try {
+    const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({ success: false, error: 'limit 必须是 1 到 100 之间的整数' });
+    }
+    const year = req.query.year === undefined ? undefined : Number(req.query.year);
+    if (year !== undefined && (!Number.isInteger(year) || year <= 0)) {
+      return res.status(400).json({ success: false, error: '年份参数无效' });
+    }
+    const tags = typeof req.query.tags === 'string'
+      ? req.query.tags.split(',').map(tag => tag.trim()).filter(Boolean)
+      : typeof req.query.tag === 'string' && req.query.tag.trim() ? [req.query.tag.trim()] : [];
+    const page = await photoDao.getPhotosCursorPage({
+      limit,
+      cursor: decodePhotoCursor(req.query.cursor),
+      year,
+      tags,
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    });
+    res.json({ success: true, data: { ...page, nextCursor: encodePhotoCursor(page.nextCursor) } });
+  } catch (error: any) {
+    const invalidCursor = error?.message === '游标参数无效';
+    res.status(invalidCursor ? 400 : 500).json({ success: false, error: invalidCursor ? error.message : '获取照片列表失败' });
+  }
+});
+
 router.get('/admin', requireAdmin, async (req, res) => {
   try {
     const page = Number(req.query.page ?? 1);
@@ -90,6 +135,7 @@ router.get('/admin', requireAdmin, async (req, res) => {
     const data = await photoDao.getPhotosPage({
       page,
       pageSize,
+      albumId: typeof req.query.albumId === 'string' ? req.query.albumId : undefined,
       year,
       tags,
       search: typeof req.query.search === 'string' ? req.query.search : undefined,
@@ -99,6 +145,38 @@ router.get('/admin', requireAdmin, async (req, res) => {
   } catch (error: any) {
     console.error('获取后台照片列表失败:', error);
     res.status(500).json({ success: false, error: '获取后台照片列表失败', message: error.message });
+  }
+});
+
+router.patch('/batch', requireAdmin, async (req, res) => {
+  try {
+    const { ids, changes } = req.body as { ids?: unknown; changes?: Record<string, unknown> };
+    if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && id.trim())) {
+      return res.status(400).json({ success: false, error: '照片 ID 列表无效' });
+    }
+    if (!changes || typeof changes !== 'object') return res.status(400).json({ success: false, error: '请选择至少一个要修改的字段' });
+    const year = changes.year;
+    if (year !== undefined && (!Number.isInteger(year) || Number(year) <= 0)) {
+      return res.status(400).json({ success: false, error: '年份必须是有效整数' });
+    }
+    const exif = changes.exif;
+    if (exif !== undefined && (!exif || typeof exif !== 'object' || Array.isArray(exif) || !Object.values(exif).every(value => typeof value === 'string'))) {
+      return res.status(400).json({ success: false, error: 'EXIF 参数无效' });
+    }
+    const tags = changes.tags as { mode?: unknown; values?: unknown } | undefined;
+    if (tags && (!['append', 'remove', 'replace'].includes(String(tags.mode)) || !Array.isArray(tags.values) || !tags.values.every(value => typeof value === 'string'))) {
+      return res.status(400).json({ success: false, error: '标签批量操作无效' });
+    }
+    if (year === undefined && exif === undefined && !tags) return res.status(400).json({ success: false, error: '请选择至少一个要修改的字段' });
+    const updated = await photoDao.batchUpdatePhotos(ids, {
+      year: year === undefined ? undefined : Number(year),
+      exif: exif as Record<string, string> | undefined,
+      tags: tags ? { mode: tags.mode as 'append' | 'remove' | 'replace', values: tags.values as string[] } : undefined,
+    });
+    res.json({ success: true, data: { updated }, message: `已更新 ${updated} 张照片` });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : '批量更新照片失败';
+    res.status(/不存在|选择|年份|无效/.test(message) ? 400 : 500).json({ success: false, error: message });
   }
 });
 
@@ -117,6 +195,8 @@ router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
     stored = await storeProcessedImages(processed.display, processed.thumbnail);
     const photoId = generatePhotoId();
     await photoDao.createPhoto({
+      albumIds: metadata.albumIds,
+      albumBeforePhotoIds: metadata.albumBeforePhotoIds,
       url: stored.url,
       thumbnail_url: stored.thumbnailUrl,
       title,
@@ -141,7 +221,7 @@ router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
     });
   } catch (error: any) {
     if (stored) await Promise.allSettled([deleteFile(stored.url), deleteFile(stored.thumbnailUrl)]);
-    const isInputError = error instanceof SyntaxError || /像素|解码|图片|Input buffer|unsupported/i.test(error.message || '');
+    const isInputError = error instanceof AlbumInputError || error instanceof SyntaxError || /像素|解码|图片|Input buffer|unsupported/i.test(error.message || '');
     const publicMessage = error instanceof SyntaxError ? '照片元数据格式无效' : error.message;
     console.error('处理上传照片失败:', error);
     res.status(isInputError ? 400 : 500).json({ success: false, error: isInputError ? publicMessage : '上传照片失败', message: error.message });
@@ -210,9 +290,9 @@ router.post('/', requireAdmin, async (req, res) => {
     });
   } catch (error: any) {
     console.error('创建照片失败:', error);
-    res.status(500).json({
+    res.status(error instanceof AlbumInputError ? 400 : 500).json({
       success: false,
-      error: '创建照片失败',
+      error: error instanceof AlbumInputError ? error.message : '创建照片失败',
       message: error.message
     });
   }
@@ -246,11 +326,35 @@ router.put('/:id', requireAdmin, async (req, res) => {
     });
   } catch (error: any) {
     console.error('更新照片失败:', error);
-    res.status(500).json({
+    res.status(error instanceof AlbumInputError ? 400 : 500).json({
       success: false,
-      error: '更新照片失败',
+      error: error instanceof AlbumInputError ? error.message : '更新照片失败',
       message: error.message
     });
+  }
+});
+
+router.delete('/batch', requireAdmin, async (req, res) => {
+  try {
+    const rawIds: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = [...new Set(rawIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())))];
+    if (!ids.length) return res.status(400).json({ success: false, error: '请至少选择一张照片' });
+    const photos = await Promise.all(ids.map(id => photoDao.getPhotoById(id)));
+    if (photos.some(photo => !photo)) return res.status(404).json({ success: false, error: '部分照片不存在或已被删除' });
+    const deleted = await photoDao.batchDeletePhotos(ids);
+    const cleanupResults = await Promise.allSettled(photos.flatMap(photo => {
+      if (!photo) return [];
+      return [
+        ...(photo.url ? [deleteFile(photo.url)] : []),
+        ...(photo.thumbnail_url && photo.thumbnail_url !== photo.url ? [deleteFile(photo.thumbnail_url)] : []),
+      ];
+    }));
+    const cleanupFailed = cleanupResults.filter(result => result.status === 'rejected').length;
+    if (cleanupFailed) console.warn(`批量删除已提交，但有 ${cleanupFailed} 个存储文件待清理`);
+    res.json({ success: true, data: { deleted, cleanupFailed }, message: `已删除 ${deleted} 张照片${cleanupFailed ? `，${cleanupFailed} 个文件待清理` : ''}` });
+  } catch (error: any) {
+    console.error('批量删除照片失败:', error);
+    res.status(500).json({ success: false, error: '批量删除照片失败', message: error.message });
   }
 });
 

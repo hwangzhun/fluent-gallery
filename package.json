@@ -9,6 +9,7 @@
     "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "NODE_ENV=production tsx server/index.ts",
     "dev:full": "npm run dev",
     "test": "vitest run"
   },
@@ -27,6 +28,7 @@
     "react-router-dom": "^7.11.0",
     "sharp": "^0.33.0",
     "sqlite3": "^5.1.6",
+    "tsx": "^4.7.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
@@ -45,7 +47,6 @@
     "jsdom": "^29.1.1",
     "supertest": "^7.2.2",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.7.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^5.0.0"

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Edit, LoaderCircle, Upload, X } from 'lucide-react';
+import { Edit, LoaderCircle, Sparkles, Upload, X } from 'lucide-react';
 import { BatchEmptyPicker, BatchResults, BatchWorkspace } from './photo-modal/BatchUploadFields';
 import { PhotoBasicFields, PhotoExifFields, PhotoPreview } from './photo-modal/PhotoModalFields';
 import { usePhotoModalForm } from './photo-modal/usePhotoModalForm';
@@ -141,6 +141,7 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
               <button type="button" onClick={form.handleClose} className="min-w-28 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-medium" disabled={form.saving}>
                 取消
               </button>
+              <button type="button" onClick={() => void form.suggestEditTags()} disabled={form.saving || form.tagging} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"><Sparkles size={16} />{form.tagging ? 'AI 正在分析…' : 'AI 自动打标签'}</button>
               <button type="submit" form="photo-form" disabled={form.saving} className={`min-w-32 px-4 py-2.5 rounded-lg text-white font-medium transition-all ${form.saving ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30'}`}>
                 {form.saving ? '保存中...' : '保存更改'}
               </button>
@@ -161,6 +162,7 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
               <button type="button" onClick={form.handleClose} disabled={form.phase === 'uploading'} className="min-w-28 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50">
                 取消
               </button>
+              <button type="button" onClick={() => void form.suggestTags()} disabled={form.phase !== 'editing' || form.items.length === 0 || form.tagging} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-medium text-violet-700 disabled:opacity-50"><Sparkles size={16} />{form.tagging ? 'AI 正在分析…' : 'AI 自动打标签'}</button>
               <button
                 type="submit"
                 form="photo-form"

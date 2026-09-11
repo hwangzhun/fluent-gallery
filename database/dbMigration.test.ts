@@ -49,3 +49,13 @@ describe('database interaction-count migration', () => {
     expect(indexes.map(index => index.name)).toEqual(expect.arrayContaining(['idx_photos_likes_count', 'idx_photos_views_count']));
   });
 });
+
+it('adds album tables idempotently without altering existing photos or memberships', async () => {
+  await databaseModule.dbRun("INSERT INTO albums(id, name) VALUES ('legacy-album', '迁移画册')");
+  await databaseModule.dbRun("INSERT INTO album_photos(album_id, photo_id, position) VALUES ('legacy-album', 'legacy-photo', 0)");
+  await databaseModule.initDatabase();
+  await databaseModule.initDatabase();
+  expect(await databaseModule.dbGet("SELECT name FROM albums WHERE id = 'legacy-album'")).toEqual({ name: '迁移画册' });
+  expect(await databaseModule.dbGet("SELECT photo_id FROM album_photos WHERE album_id = 'legacy-album'")).toEqual({ photo_id: 'legacy-photo' });
+  expect(await databaseModule.dbGet("SELECT title FROM photos WHERE id = 'legacy-photo'")).toEqual({ title: 'Legacy' });
+});

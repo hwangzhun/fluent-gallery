@@ -76,3 +76,18 @@ export async function processUploadedImage(file: Pick<Express.Multer.File, 'buff
     height: displayResult.info.height,
   };
 }
+
+/** Prepare a compact, orientation-corrected image for a vision model request. */
+export async function prepareImageForVision(file: Pick<Express.Multer.File, 'buffer' | 'mimetype' | 'originalname'>): Promise<Buffer> {
+  let source: sharp.Sharp;
+  if (isHeic(file.mimetype, file.originalname)) {
+    const decoded = await decodeHeic(file.buffer);
+    source = sharp(decoded.data, { raw: { width: decoded.width, height: decoded.height, channels: 4 }, limitInputPixels: MAX_INPUT_PIXELS });
+  } else {
+    source = sharp(file.buffer, { limitInputPixels: MAX_INPUT_PIXELS, animated: false });
+  }
+  return source.rotate().toColourspace('srgb')
+    .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 82, mozjpeg: true })
+    .toBuffer();
+}

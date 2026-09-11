@@ -42,19 +42,17 @@ async function ensureUploadDir(): Promise<string> {
 }
 
 /**
- * 生成文件路径（按日期组织）
+ * 生成文件路径（按月份组织）
  */
 function generateFilePath(originalName: string, isThumbnail = false): string {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  
   const ext = originalName.split('.').pop() || 'jpg';
   const fileName = `${uuidv4()}.${ext}`;
   const subDir = isThumbnail ? 'thumbs' : 'photos';
   
-  return `${subDir}/${year}/${month}/${day}/${fileName}`;
+  return `${subDir}/${year}/${month}/${fileName}`;
 }
 
 /**
@@ -138,8 +136,8 @@ export async function deleteLocalFile(url: string): Promise<void> {
 
   try {
     // 从 URL 中提取文件路径
-    // 例如：http://localhost:3001/uploads/photos/2024/01/15/xxx.jpg
-    // 提取：photos/2024/01/15/xxx.jpg
+    // 例如：http://localhost:3001/uploads/photos/2024/01/xxx.jpg
+    // 提取：photos/2024/01/xxx.jpg
     const urlObj = new URL(url);
     const relativePath = urlObj.pathname.replace('/uploads/', '');
     

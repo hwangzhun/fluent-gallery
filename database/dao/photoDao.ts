@@ -1,16 +1,22 @@
-import { dbRun, dbGet, dbAll } from '../db';
+import { dbRun, dbGet, dbAll, withTransaction } from '../db';
+import { setPhotoAlbums } from './albumDao';
 import type { PhotoEntity, PhotoWithTags, CreatePhotoInput, UpdatePhotoInput, ExifInfo } from '../types';
 
 export type PhotoSort = 'latest' | 'likes' | 'views';
+export interface PhotoCursor { createdAt: string; id: string }
 
 /**
  * 照片数据访问对象
  */
 export class PhotoDao {
-  private buildPhotoFilter(options: { year?: number; tags?: string[]; search?: string } = {}) {
+  private buildPhotoFilter(options: { albumId?: string; year?: number; tags?: string[]; search?: string } = {}) {
     const where: string[] = [];
     const params: unknown[] = [];
 
+    if (options.albumId) {
+      where.push('EXISTS (SELECT 1 FROM album_photos ap WHERE ap.photo_id = p.id AND ap.album_id = ?)');
+      params.push(options.albumId);
+    }
     if (options.year) {
       where.push('p.year = ?');
       params.push(options.year);
@@ -57,11 +63,40 @@ export class PhotoDao {
     return photos.map(photo => ({ ...photo, tags: tagsByPhoto.get(photo.id) || [] }));
   }
 
+  private async attachAlbums(photos: PhotoWithTags[]): Promise<PhotoWithTags[]> {
+    if (photos.length === 0) return [];
+    const rows = await dbAll<{ photo_id: string; id: string; name: string }>(
+      `SELECT ap.photo_id, a.id, a.name
+       FROM album_photos ap INNER JOIN albums a ON a.id = ap.album_id
+       WHERE ap.photo_id IN (${photos.map(() => '?').join(', ')})
+       ORDER BY a.position, a.id`,
+      photos.map(photo => photo.id),
+    );
+    const albumsByPhoto = new Map<string, { id: string; name: string }[]>();
+    rows.forEach(({ photo_id, id, name }) => albumsByPhoto.set(photo_id, [...(albumsByPhoto.get(photo_id) || []), { id, name }]));
+    return photos.map(photo => ({ ...photo, albums: albumsByPhoto.get(photo.id) || [] }));
+  }
+
+  async getPhotosWithTagsByIds(ids: string[]): Promise<PhotoWithTags[]> {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+    const rows = await dbAll<PhotoEntity>(
+      `SELECT * FROM photos WHERE id IN (${uniqueIds.map(() => '?').join(', ')})`,
+      uniqueIds,
+    );
+    const withTags = await this.attachTags(rows);
+    const byId = new Map(withTags.map(photo => [photo.id, photo]));
+    return ids.flatMap(id => {
+      const photo = byId.get(id);
+      return photo ? [photo] : [];
+    });
+  }
+
   /**
    * 组合筛选照片。多个标签采用 AND 语义：结果必须同时具备全部标签。
    * 标签使用一次批量查询回填，避免列表读取时的 N+1 查询。
    */
-  async getPhotos(options: { year?: number; tags?: string[]; search?: string } = {}): Promise<PhotoWithTags[]> {
+  async getPhotos(options: { albumId?: string; year?: number; tags?: string[]; search?: string } = {}): Promise<PhotoWithTags[]> {
     const filter = this.buildPhotoFilter(options);
     const photos = await dbAll<PhotoEntity>(
       `SELECT p.* FROM photos p ${filter.clause} ORDER BY p.created_at DESC, p.id DESC`,
@@ -70,7 +105,34 @@ export class PhotoDao {
     return this.attachTags(photos);
   }
 
-  async getPhotosPage(options: { page: number; pageSize: number; year?: number; tags?: string[]; search?: string; sort?: PhotoSort }) {
+  async getPhotosCursorPage(options: { limit: number; cursor?: PhotoCursor; year?: number; tags?: string[]; search?: string }) {
+    const filter = this.buildPhotoFilter(options);
+    const cursorClause = options.cursor
+      ? `${filter.clause ? ' AND' : 'WHERE'} (p.created_at < ? OR (p.created_at = ? AND p.id < ?))`
+      : '';
+    const cursorParams = options.cursor ? [options.cursor.createdAt, options.cursor.createdAt, options.cursor.id] : [];
+    const rows = await dbAll<PhotoEntity>(
+      `SELECT p.* FROM photos p ${filter.clause}${cursorClause}
+       ORDER BY p.created_at DESC, p.id DESC LIMIT ?`,
+      [...filter.params, ...cursorParams, options.limit + 1] as any[]
+    );
+    const hasMore = rows.length > options.limit;
+    const pageRows = rows.slice(0, options.limit);
+    const totalRow = await dbGet<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM photos p ${filter.clause}`,
+      filter.params as any[]
+    );
+    return {
+      items: await this.attachTags(pageRows),
+      total: totalRow?.total || 0,
+      hasMore,
+      nextCursor: hasMore && pageRows.length
+        ? { createdAt: pageRows[pageRows.length - 1].created_at, id: pageRows[pageRows.length - 1].id }
+        : null,
+    };
+  }
+
+  async getPhotosPage(options: { page: number; pageSize: number; albumId?: string; year?: number; tags?: string[]; search?: string; sort?: PhotoSort }) {
     const filter = this.buildPhotoFilter(options);
     const orderBy = options.sort === 'likes'
       ? 'p.likes_count DESC, p.created_at DESC, p.id DESC'
@@ -88,7 +150,7 @@ export class PhotoDao {
       [...filter.params, options.pageSize, (options.page - 1) * options.pageSize] as any[]
     );
     return {
-      items: await this.attachTags(photos),
+      items: await this.attachAlbums(await this.attachTags(photos)),
       total,
       page: options.page,
       pageSize: options.pageSize,
@@ -105,6 +167,13 @@ export class PhotoDao {
    * 创建照片（包含标签关联）
    */
   async createPhoto(input: CreatePhotoInput, photoId: string): Promise<PhotoEntity> {
+    return withTransaction(async () => {
+      const photo = await this.createPhotoRecord(input, photoId);
+      if (input.albumIds !== undefined) await setPhotoAlbums(photoId, input.albumIds, input.albumBeforePhotoIds);
+      return photo;
+    });
+  }
+  private async createPhotoRecord(input: CreatePhotoInput, photoId: string): Promise<PhotoEntity> {
     const exifJson = input.exif ? JSON.stringify(input.exif) : null;
     const now = new Date().toISOString();
 
@@ -269,6 +338,13 @@ export class PhotoDao {
    * 更新照片
    */
   async updatePhoto(id: string, input: UpdatePhotoInput): Promise<PhotoEntity | null> {
+    return withTransaction(async () => {
+      const photo = await this.updatePhotoRecord(id, input);
+      if (photo && input.albumIds !== undefined) await setPhotoAlbums(id, input.albumIds);
+      return photo;
+    });
+  }
+  private async updatePhotoRecord(id: string, input: UpdatePhotoInput): Promise<PhotoEntity | null> {
     const existingPhoto = await this.getPhotoById(id);
     if (!existingPhoto) {
       return null;
@@ -339,12 +415,59 @@ export class PhotoDao {
     return await this.getPhotoById(id);
   }
 
+  /** Apply the limited set of safe bulk changes as one database transaction. */
+  async batchUpdatePhotos(ids: string[], changes: {
+    year?: number;
+    exif?: Record<string, string>;
+    tags?: { mode: 'append' | 'remove' | 'replace'; values: string[] };
+  }): Promise<number> {
+    const uniqueIds = [...new Set(ids)];
+    if (!uniqueIds.length) throw new Error('请至少选择一张照片');
+    const existing = await this.getPhotos({});
+    const selected = existing.filter(photo => uniqueIds.includes(photo.id));
+    if (selected.length !== uniqueIds.length) throw new Error('部分照片不存在或已被删除');
+
+    return withTransaction(async () => {
+      for (const photo of selected) {
+        const input: UpdatePhotoInput = {};
+        if (changes.year !== undefined) input.year = changes.year;
+        if (changes.exif && Object.keys(changes.exif).length) {
+          let currentExif: Record<string, string> = {};
+          try { currentExif = photo.exif ? JSON.parse(photo.exif) : {}; } catch { currentExif = {}; }
+          input.exif = { ...currentExif, ...changes.exif } as unknown as ExifInfo;
+        }
+        if (changes.tags) {
+          const values = [...new Set(changes.tags.values.map(value => value.trim()).filter(Boolean))];
+          const current = photo.tags;
+          input.tags = changes.tags.mode === 'replace'
+            ? values
+            : changes.tags.mode === 'append'
+              ? [...new Set([...current, ...values])]
+              : current.filter(tag => !values.includes(tag));
+        }
+        await this.updatePhoto(photo.id, input);
+      }
+      return selected.length;
+    });
+  }
+
   /**
    * 删除照片
    */
   async deletePhoto(id: string): Promise<boolean> {
     const result = await dbRun('DELETE FROM photos WHERE id = ?', [id]);
     return result.changes > 0;
+  }
+
+  async batchDeletePhotos(ids: string[]): Promise<number> {
+    const uniqueIds = [...new Set(ids)];
+    return withTransaction(async () => {
+      for (const id of uniqueIds) {
+        const result = await dbRun('DELETE FROM photos WHERE id = ?', [id]);
+        if (result.changes !== 1) throw new Error(`照片不存在或已被删除：${id}`);
+      }
+      return uniqueIds.length;
+    });
   }
 
   /**

@@ -17,7 +17,7 @@ export class PhotoUploadService {
   async uploadPhoto(data: PhotoUploadData): Promise<Photo> {
     const body = new FormData();
     body.append('file', data.file);
-    body.append('metadata', JSON.stringify({ title: data.title, year: Number(data.year), tags: parsePhotoTags(data.tags), exif: data.exif }));
+    body.append('metadata', JSON.stringify({ albumIds: data.albumIds, albumBeforePhotoIds: data.albumBeforePhotoIds, title: data.title, year: Number(data.year), tags: parsePhotoTags(data.tags), exif: data.exif }));
     const response = await this.dependencies.apiFetch('/photos/upload', { method: 'POST', body });
     const result: UploadResponse = await response.json();
     if (!response.ok || !result.success) throw new Error(result.error || '照片上传失败');

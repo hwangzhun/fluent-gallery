@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Check, Edit3, Plus, RefreshCw, Search, Tag, Trash2, X } from 'lucide-react';
+import { Check, Cloud, Edit3, List, Plus, RefreshCw, Search, Tag, Trash2, X } from 'lucide-react';
 import { tagService, type TagWithCount } from '../../services/tagService';
 
 function isSessionError(message: string) {
@@ -37,6 +37,7 @@ export function TagsPanel({ onSessionExpired }: { onSessionExpired: () => void }
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [view, setView] = useState<'list' | 'cloud'>(() => localStorage.getItem('fluent-gallery-admin-tags-view') === 'cloud' ? 'cloud' : 'list');
 
   useEffect(() => {
     let active = true;
@@ -58,6 +59,11 @@ export function TagsPanel({ onSessionExpired }: { onSessionExpired: () => void }
     return keyword ? tags.filter(tag => tag.name.toLocaleLowerCase().includes(keyword)) : tags;
   }, [query, tags]);
   const totalAssociations = useMemo(() => tags.reduce((sum, tag) => sum + tag.photoCount, 0), [tags]);
+  const cloudRange = useMemo(() => {
+    const counts = filteredTags.map(tag => tag.photoCount);
+    return { min: Math.min(...counts, 0), max: Math.max(...counts, 0) };
+  }, [filteredTags]);
+  const cloudSize = (count: number) => cloudRange.max === cloudRange.min ? 18 : 14 + ((count - cloudRange.min) / (cloudRange.max - cloudRange.min)) * 20;
 
   const showNotice = (message: string) => {
     setNotice(message);
@@ -126,13 +132,13 @@ export function TagsPanel({ onSessionExpired }: { onSessionExpired: () => void }
 
     <div className="studio-tags-summary">
       <div><h2>全部标签</h2><p>{tags.length} 个标签 · {totalAssociations} 次照片关联</p></div>
-      {error && <button type="button" onClick={reload}><RefreshCw size={15} />重新加载</button>}
+      <div className="flex items-center gap-3"><div className="inline-flex border border-slate-300 p-1"><button type="button" aria-label="标签列表视图" aria-pressed={view === 'list'} onClick={() => { setView('list'); localStorage.setItem('fluent-gallery-admin-tags-view', 'list'); }} className={`p-1.5 ${view === 'list' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}><List size={16} /></button><button type="button" aria-label="标签云视图" aria-pressed={view === 'cloud'} onClick={() => { setView('cloud'); localStorage.setItem('fluent-gallery-admin-tags-view', 'cloud'); }} className={`p-1.5 ${view === 'cloud' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}><Cloud size={16} /></button></div>{error && <button type="button" onClick={reload}><RefreshCw size={15} />重新加载</button>}</div>
     </div>
 
     {loading && tags.length === 0 ? <div className="studio-tags-state" role="status"><RefreshCw className="studio-spin" size={25} /><p>正在整理标签…</p></div>
       : error && tags.length === 0 ? <div className="studio-tags-state is-error"><Tag size={28} /><h3>无法加载标签</h3><p>{error}</p></div>
       : filteredTags.length === 0 ? <div className="studio-tags-state"><Tag size={28} /><h3>{query ? '没有找到匹配的标签' : '还没有标签'}</h3><p>{query ? '试试其他关键词。' : '在上方创建第一个标签。'}</p></div>
-      : <div className="studio-tags-list">
+      : view === 'cloud' ? <div className="studio-tag-cloud" aria-label="标签使用统计">{[...filteredTags].sort((a, b) => b.photoCount - a.photoCount || a.name.localeCompare(b.name, 'zh-CN')).map(tag => <span key={tag.id} className="studio-tag-cloud-item" style={{ fontSize: `${cloudSize(tag.photoCount)}px` }} title={`${tag.name}：${tag.photoCount} 张照片`}>{tag.name}<small>{tag.photoCount} 张</small></span>)}</div> : <div className="studio-tags-list">
         <div className="studio-tag-row studio-tag-heading" aria-hidden="true"><span>标签名称</span><span>关联照片</span><span>创建日期</span><span>操作</span></div>
         {filteredTags.map(tag => <div className="studio-tag-row" key={tag.id}>
           <div className={`studio-tag-name ${editingId === tag.id ? 'is-editing' : ''}`}>

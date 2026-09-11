@@ -6,6 +6,7 @@ import { PhotoImage } from './PhotoImage';
 
 interface LightboxProps {
   photo: Photo;
+  albumName?: string;
   onClose: () => void;
   onNext: () => void;
   onPrev: () => void;
@@ -66,9 +67,10 @@ const ArtworkDetails: React.FC<{ photo: Photo }> = ({ photo }) => {
   );
 };
 
-export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPrev, hasNext, hasPrev, position, total }) => {
+export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPrev, hasNext, hasPrev, position, total, albumName }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
     const previousOverflow = document.body.style.overflow;
@@ -87,10 +89,16 @@ export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPr
         if (event.key === 'ArrowLeft' && hasPrev) { event.preventDefault(); onPrev(); }
       }}
     >
-      <header className="lightbox-toolbar"><span className="lightbox-brand">Fluent Gallery<span> / 作品展映</span></span><div><button onClick={() => setShowInfo(value => !value)} aria-label="作品信息" aria-expanded={showInfo} aria-controls="artwork-details"><Info size={19} strokeWidth={1.4} /></button><button onClick={onClose} aria-label="关闭大图" autoFocus><X size={22} strokeWidth={1.4} /></button></div></header>
+      <header className="lightbox-toolbar"><span className={`lightbox-brand ${albumName ? 'is-album' : ''}`}>Fluent Gallery<span> / {albumName || '作品展映'}</span></span><div><button onClick={() => setShowInfo(value => !value)} aria-label="作品信息" aria-expanded={showInfo} aria-controls="artwork-details"><Info size={19} strokeWidth={1.4} /></button><button onClick={onClose} aria-label="关闭大图" autoFocus><X size={22} strokeWidth={1.4} /></button></div></header>
       <div className="lightbox-stage" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
         <button className="lightbox-previous" disabled={!hasPrev} onClick={onPrev} aria-label="上一幅作品"><ChevronLeft size={25} strokeWidth={1.2} /></button>
-        <div className="lightbox-photo"><PhotoImage key={photo.id} photo={photo} original priority /></div>
+        <div className="lightbox-photo" onTouchStart={event => { const touch = event.touches[0]; touchStart.current = event.touches.length === 1 ? { x: touch.clientX, y: touch.clientY } : null; }} onTouchEnd={event => {
+          const start = touchStart.current; touchStart.current = null;
+          const end = event.changedTouches[0];
+          if (!start || !end || Math.abs(end.clientX - start.x) < 60 || Math.abs(end.clientY - start.y) > Math.abs(end.clientX - start.x) / 2) return;
+          if (end.clientX < start.x && hasNext) onNext();
+          if (end.clientX > start.x && hasPrev) onPrev();
+        }}><PhotoImage key={photo.id} photo={photo} original priority /></div>
         <button className="lightbox-next" disabled={!hasNext} onClick={onNext} aria-label="下一幅作品"><ChevronRight size={25} strokeWidth={1.2} /></button>
       </div>
       <div className="lightbox-caption"><div><h2>{photo.title}</h2><p>{photo.year}{photo.exif?.author && ` · ${photo.exif.author}`}</p></div><span>{position ? `${String(position).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : '封面作品'}</span><p className="lightbox-keyboard-hint">← → 切换作品 · ESC 返回</p></div>

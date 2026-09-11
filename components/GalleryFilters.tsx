@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, Grid2X2, LayoutGrid, X } from 'lucide-react';
+import { Grid2X2, LayoutGrid, X } from 'lucide-react';
 import { FilterState } from '../types';
 import { tagService } from '../services/tagService';
+import { SelectMenu } from './SelectMenu';
 
 interface GalleryFiltersProps {
   filter: FilterState;
@@ -28,12 +29,7 @@ export const GalleryFilters: React.FC<GalleryFiltersProps> = ({ filter, onFilter
         {tags.map(tag => <button key={tag} className={filter.tag === tag ? 'is-active' : ''} aria-pressed={filter.tag === tag} onClick={() => onFilterChange({ tag })}>{tag}</button>)}
       </div>
       <div className="gallery-filter-tools">
-        <label className="gallery-year"><span className="sr-only">拍摄年份</span>
-          <select value={filter.year ?? ''} onChange={event => onFilterChange({ year: event.target.value ? Number(event.target.value) : null })}>
-            <option value="">所有年份</option>
-            {years.map(year => <option key={year} value={year}>{year}</option>)}
-          </select><ChevronDown size={13} aria-hidden="true" />
-        </label>
+        <SelectMenu className="gallery-year" ariaLabel="拍摄年份" value={filter.year ?? ''} onChange={value => onFilterChange({ year: value === '' ? null : Number(value) })} options={[{ value: '', label: '所有年份' }, ...years.map(year => ({ value: year, label: String(year) }))]} />
         {(filter.year !== null || filter.tag !== null) && <button className="gallery-clear" onClick={() => onFilterChange({ year: null, tag: null })} aria-label="清除所有筛选"><X size={15} /></button>}
         <div className="gallery-layout-toggle" role="group" aria-label="作品布局">
           <button aria-label="舒展布局" aria-pressed={!compact} onClick={() => onCompactChange(false)}><Grid2X2 size={16} strokeWidth={1.4} /></button>

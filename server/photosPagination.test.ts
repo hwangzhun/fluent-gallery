@@ -30,6 +30,22 @@ beforeAll(async () => {
 afterAll(async () => { await closeDatabase(); rmSync(directory, { recursive: true, force: true }); });
 
 describe('admin photo pagination', () => {
+  it('returns stable public cursor pages without duplicate photos', async () => {
+    const first = await request(app).get('/api/photos/page?limit=25').expect(200);
+    const second = await request(app).get(`/api/photos/page?limit=25&cursor=${encodeURIComponent(first.body.data.nextCursor)}`).expect(200);
+    const third = await request(app).get(`/api/photos/page?limit=25&cursor=${encodeURIComponent(second.body.data.nextCursor)}`).expect(200);
+    const ids = [...first.body.data.items, ...second.body.data.items, ...third.body.data.items].map(item => item.id);
+
+    expect(first.body.data).toMatchObject({ total: 65, hasMore: true });
+    expect(first.body.data.items).toHaveLength(25);
+    expect(second.body.data.items).toHaveLength(25);
+    expect(third.body.data).toMatchObject({ total: 65, hasMore: false, nextCursor: null });
+    expect(third.body.data.items).toHaveLength(15);
+    expect(new Set(ids).size).toBe(65);
+    await request(app).get('/api/photos/page?limit=101').expect(400);
+    await request(app).get('/api/photos/page?cursor=invalid').expect(400);
+  });
+
   it('requires authentication and validates page sizes', async () => {
     await request(app).get('/api/photos/admin').expect(401);
     await agent.get('/api/photos/admin?pageSize=24').expect(400);
@@ -77,8 +93,8 @@ describe('admin photo pagination', () => {
       .field('metadata', JSON.stringify({ title: 'Processed', year: 2026, tags: ['upload'], exif: {} }))
       .attach('file', source, { filename: 'source.jpg', contentType: 'image/jpeg' })
       .expect(201);
-    expect(response.body.data.url).toMatch(/\/photos\/.*\.webp$/);
-    expect(response.body.data.thumbnail_url).toMatch(/\/thumbs\/.*\.webp$/);
+    expect(response.body.data.url).toMatch(/\/photos\/\d{4}\/\d{2}\/[^/]+\.webp$/);
+    expect(response.body.data.thumbnail_url).toMatch(/\/thumbs\/\d{4}\/\d{2}\/[^/]+\.webp$/);
     expect(response.body.processing).toMatchObject({ format: 'webp', width: 1200, height: 800 });
     const files = readdirSync(join(directory, 'uploads'), { recursive: true }).map(String).filter(name => /\.(jpg|webp)$/i.test(name));
     expect(files.filter(name => name.endsWith('.webp'))).toHaveLength(2);

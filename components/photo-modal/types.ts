@@ -20,6 +20,7 @@ export interface ExifData {
 }
 
 export interface PhotoFormData {
+  albumIds?: string[];
   title: string;
   year: number;
   tags: string;
@@ -28,9 +29,11 @@ export interface PhotoFormData {
 
 export interface PhotoUploadData extends PhotoFormData {
   file: File;
+  albumBeforePhotoIds?: string[];
 }
 
 export type BatchFieldKey =
+  | 'albumIds'
   | 'title'
   | 'year'
   | 'tags'
@@ -59,6 +62,8 @@ export interface PhotoUploadItem {
   uploadStatus: BatchUploadStatus;
   error?: string;
   uploadedPhoto?: Photo;
+  tagStatus?: 'loading' | 'ready' | 'failed';
+  tagError?: string;
 }
 
 export interface BatchUploadResult {

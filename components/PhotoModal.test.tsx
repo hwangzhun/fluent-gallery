@@ -7,6 +7,8 @@ import exifr from 'exifr';
 import type { Photo } from '../types';
 import { PhotoModal, type PhotoUploadData } from './PhotoModal';
 
+vi.mock('../services/albumService', () => ({ albumService: { list: vi.fn().mockResolvedValue([{ id: 'album-one', name: '旅行', published: false }]) } }));
+
 vi.mock('exifr', () => ({ default: { parse: vi.fn() } }));
 vi.mock('../services/tagService', () => ({
   tagService: { getAllTagNames: vi.fn().mockResolvedValue([]), createTag: vi.fn() },
@@ -79,11 +81,21 @@ describe('PhotoModal batch upload', () => {
     expect(screen.getByLabelText('标题')).toHaveValue('公共标题');
 
     fireEvent.change(screen.getByLabelText('继续添加照片'), { target: { files: [file('third.jpg')] } });
-    await waitFor(() => expect(screen.getByLabelText('照片数量：3 / 20')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('照片数量：3')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '编辑第 3 张：third' }));
     expect(screen.getByLabelText('标题')).toHaveValue('third');
 
-    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(3);
+    expect(screen.getByLabelText('将画册设为公共字段')).toBeInTheDocument();
+    expect(screen.getByLabelText('将标题设为公共字段')).toBeChecked();
+  });
+
+  it('caps a batch at 50 photos instead of starting unbounded EXIF work', async () => {
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} />);
+    const files = Array.from({ length: 51 }, (_, index) => file(`photo-${index}.jpg`, index + 1));
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files } });
+    await waitFor(() => expect(screen.getByLabelText('照片数量：50')).toBeInTheDocument());
+    expect(screen.getByText(/1 个文件未加入/)).toBeInTheDocument();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(50);
   });
 
   it('continues after a failure, shows results, and retries only failed photos', async () => {
@@ -136,7 +148,7 @@ describe('PhotoModal batch upload', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('ignores duplicates, enforces the 20 photo limit, and releases removed previews', async () => {
+  it('ignores duplicates, accepts files within the batch cap, and releases removed previews', async () => {
     const files = Array.from({ length: 21 }, (_, index) => file(`photo-${index}.jpg`, index + 1));
     render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} />);
 
@@ -144,10 +156,10 @@ describe('PhotoModal batch upload', () => {
       target: { files: [...files, files[0]] },
     });
 
-    expect(await screen.findByLabelText('照片数量：20 / 20')).toBeTruthy();
-    expect(screen.getByText('已忽略 1 个重复文件；已达到 20 张上限，1 个文件未加入')).toBeTruthy();
+    expect(await screen.findByLabelText('照片数量：21')).toBeTruthy();
+    expect(screen.getByText('已忽略 1 个重复文件')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '移除 photo-0' }));
-    expect(screen.getByLabelText('照片数量：19 / 20')).toBeTruthy();
+    expect(screen.getByLabelText('照片数量：20')).toBeTruthy();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-0');
   });
 
@@ -184,6 +196,27 @@ describe('PhotoModal batch upload', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
   });
+  it('shares album choices, keeps per-photo overrides, and carries retry placement', async () => {
+    let failed = false;
+    const onUpload = vi.fn(async (data: PhotoUploadData) => {
+      if (data.file.name === 'first.jpg' && !failed) { failed = true; throw new Error('重试'); }
+      return uploadedPhoto(data);
+    });
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} onUpload={onUpload} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('first.jpg'), file('second.jpg'), file('third.jpg')] } });
+    fireEvent.click(await screen.findByLabelText('将画册设为公共字段'));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '旅行 · 草稿' }));
+    fireEvent.click(screen.getByLabelText('将画册设为公共字段'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 3 张：third' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '旅行 · 草稿' }));
+    fireEvent.submit(document.getElementById('photo-form')!);
+    await screen.findByText('成功 2 张，失败 1 张');
+    expect(onUpload.mock.calls.map(([data]) => data.albumIds)).toEqual([['album-one'], ['album-one'], []]);
+    fireEvent.click(screen.getByRole('button', { name: '重试失败项（1）' }));
+    await screen.findByText('成功 3 张');
+    expect(onUpload).toHaveBeenLastCalledWith(expect.objectContaining({ albumIds: ['album-one'], albumBeforePhotoIds: ['photo-second.jpg', 'photo-third.jpg'] }));
+  });
+
 });
 
 describe('PhotoModal edit mode', () => {

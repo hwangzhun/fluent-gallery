@@ -121,7 +121,6 @@ export function generateFilePath(filename: string, prefix: string = 'photos'): s
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
   
   // 提取文件扩展名
   const ext = filename.split('.').pop() || 'jpg';
@@ -131,7 +130,7 @@ export function generateFilePath(filename: string, prefix: string = 'photos'): s
   const random = Math.random().toString(36).substring(2, 9);
   const uniqueFilename = `${timestamp}-${random}.${ext}`;
   
-  return `${prefix}/${year}/${month}/${day}/${uniqueFilename}`;
+  return `${prefix}/${year}/${month}/${uniqueFilename}`;
 }
 
 /**

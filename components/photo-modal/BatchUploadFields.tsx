@@ -41,7 +41,7 @@ export function BatchEmptyPicker({ onFileSelect, onDrop }: FilePickerProps) {
       <div className="pointer-events-none max-w-sm">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-blue-600 shadow-sm ring-1 ring-slate-200"><ImagePlus size={27} /></div>
         <h3 className="mt-4 text-base font-semibold text-slate-900">拖入照片，或点击选择</h3>
-        <p className="mt-1.5 text-sm leading-6 text-slate-500">支持一次选择多张照片，最多 {MAX_BATCH_FILES} 张</p>
+        <p className="mt-1.5 text-sm leading-6 text-slate-500">支持一次选择多张照片，每批最多 {MAX_BATCH_FILES} 张</p>
         <span className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm"><Upload size={16} />选择照片</span>
       </div>
     </section>
@@ -60,6 +60,9 @@ function UploadStatus({ item }: { item: PhotoUploadItem }) {
   if (item.uploadStatus === 'uploading') return <span className="inline-flex items-center gap-1.5 text-blue-600"><LoaderCircle size={13} className="animate-spin" />上传中</span>;
   if (item.uploadStatus === 'success') return <span className="inline-flex items-center gap-1.5 text-emerald-600"><CheckCircle2 size={13} />已完成</span>;
   if (item.uploadStatus === 'failed') return <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={13} />失败</span>;
+  if (item.tagStatus === 'loading') return <span className="inline-flex items-center gap-1.5 text-violet-600"><LoaderCircle size={13} className="animate-spin" />AI 分析中</span>;
+  if (item.tagStatus === 'failed') return <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={13} />AI 标签失败</span>;
+  if (item.tagStatus === 'ready') return <span className="inline-flex items-center gap-1.5 text-violet-600"><CheckCircle2 size={13} />标签已生成</span>;
   if (item.exifStatus === 'loading') return <span className="inline-flex items-center gap-1.5 text-slate-500"><LoaderCircle size={13} className="animate-spin" />读取信息</span>;
   return <span className="text-slate-500">等待上传</span>;
 }
@@ -108,7 +111,7 @@ function BatchQueue({ items, activeId, phase, onSelect, onRemove, onFileSelect }
   return (
     <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-5">
       <div className="mb-2.5 flex items-center justify-between gap-3">
-        <p aria-label={`照片数量：${items.length} / ${MAX_BATCH_FILES}`} className="text-xs font-medium text-slate-500">照片 <span className="font-semibold text-slate-800">{items.length}</span> / {MAX_BATCH_FILES}</p>
+        <p aria-label={`照片数量：${items.length}`} className="text-xs font-medium text-slate-500">照片 <span className="font-semibold text-slate-800">{items.length}</span> / {MAX_BATCH_FILES}</p>
         <p className="hidden text-xs text-slate-400 sm:block">选择缩略图编辑对应照片</p>
       </div>
       <div className="flex items-center gap-2">
@@ -172,7 +175,7 @@ interface BatchWorkspaceProps {
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onFileSelect: (event: ChangeEvent<HTMLInputElement>) => void;
-  onChange: (field: BatchFieldKey, value: string | number) => void;
+  onChange: (field: BatchFieldKey, value: string | number | string[]) => void;
   onToggleShared: (field: BatchFieldKey) => void;
 }
 
@@ -214,6 +217,7 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
             {panel === 'basic' ? (
               <>
                 <PhotoBasicFields data={activeItem.data} onChange={onChange} sharedFields={sharedFields} onToggleShared={onToggleShared} disabled={disabled} editorKey={activeItem.id} />
+                {activeItem.tagError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 自动打标签失败：{activeItem.tagError}</p>}
                 <div className="mt-5 rounded-xl bg-blue-50 px-3.5 py-3 text-xs leading-5 text-blue-700"><span className="font-medium">公共字段：</span>打开开关后，再次修改该字段会同步到当前批次。</div>
               </>
             ) : (

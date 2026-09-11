@@ -17,6 +17,8 @@ export function dbPhotoToPhoto(dbPhoto: PhotoWithTags): Photo {
 
   return {
     id: dbPhoto.id,
+    albums: dbPhoto.albums,
+    albumIds: dbPhoto.albums?.map(album => album.id),
     url: dbPhoto.url,
     thumbnailUrl: dbPhoto.thumbnail_url,
     title: dbPhoto.title,

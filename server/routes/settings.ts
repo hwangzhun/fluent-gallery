@@ -5,7 +5,21 @@ import { loadStorageConfig } from '../storage/config';
 
 const router = express.Router();
 
-async function ensureSettingsSchema() {
+const DEFAULT_SEO = {
+  title: 'Fluent Gallery | Hwangzhun 摄影作品集',
+  description: 'Fluent Gallery 是 Hwangzhun 的个人摄影画廊，记录光影、城市、自然与日常片刻。',
+  keywords: 'Fluent Gallery, Hwangzhun, 摄影, 摄影作品集, 个人画廊, 光影, 城市摄影',
+  author: 'Hwangzhun', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '',
+};
+const DEFAULT_AI = { baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash' };
+
+async function readStored<T extends object>(key: string, fallback: T): Promise<T> {
+  await ensureSettingsSchema();
+  const row = await dbGet<{ value: string }>('SELECT value FROM settings WHERE key = ?', [key]);
+  try { return { ...fallback, ...(row ? JSON.parse(row.value) : {}) }; } catch { return fallback; }
+}
+
+export async function ensureSettingsSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -95,6 +109,41 @@ router.put('/gallery', requireAdmin, async (request, response) => {
   await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('gallery_hero_photo_id', ?, datetime('now'))", [heroPhotoId?.trim() || '']);
   await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('gallery_hero_image_fit', ?, datetime('now'))", [heroImageFit]);
   response.json({ success: true, message: '图库设置已更新', data: { randomizePhotos, heroPhotoId: heroPhotoId?.trim() || null, heroImageFit } });
+});
+
+router.get('/seo', async (_request, response) => {
+  response.json({ success: true, data: await readStored('seo_config', DEFAULT_SEO) });
+});
+
+router.put('/seo', requireAdmin, async (request, response) => {
+  const fields = ['title', 'description', 'keywords', 'author', 'canonicalUrl', 'ogTitle', 'ogDescription', 'ogImage'];
+  const value: Record<string, string> = {};
+  for (const field of fields) {
+    const raw = request.body?.[field];
+    if (typeof raw !== 'string') return response.status(400).json({ success: false, error: `${field} 必须是文本` });
+    value[field] = raw.trim();
+  }
+  if (!value.title || !value.description) return response.status(400).json({ success: false, error: '页面标题和描述不能为空' });
+  await ensureSettingsSchema();
+  await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('seo_config', ?, datetime('now'))", [JSON.stringify(value)]);
+  response.json({ success: true, data: value, message: 'SEO 设置已保存' });
+});
+
+router.get('/ai', requireAdmin, async (_request, response) => {
+  const stored = await readStored<{ baseUrl: string; model: string; apiKey?: string }>('ai_config', DEFAULT_AI);
+  response.json({ success: true, data: { baseUrl: stored.baseUrl, model: stored.model, hasApiKey: Boolean(stored.apiKey) } });
+});
+
+router.put('/ai', requireAdmin, async (request, response) => {
+  const baseUrl = typeof request.body?.baseUrl === 'string' ? request.body.baseUrl.trim().replace(/\/$/, '') : '';
+  const model = typeof request.body?.model === 'string' ? request.body.model.trim() : '';
+  const apiKey = typeof request.body?.apiKey === 'string' ? request.body.apiKey.trim() : '';
+  if (!/^https?:\/\//.test(baseUrl) || !model) return response.status(400).json({ success: false, error: '请填写有效的 Base URL 和模型名' });
+  const existing = await readStored<{ baseUrl: string; model: string; apiKey?: string }>('ai_config', DEFAULT_AI);
+  const saved = { baseUrl, model, apiKey: apiKey || existing.apiKey || '' };
+  await ensureSettingsSchema();
+  await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('ai_config', ?, datetime('now'))", [JSON.stringify(saved)]);
+  response.json({ success: true, data: { baseUrl, model, hasApiKey: Boolean(saved.apiKey) }, message: 'API 设置已保存' });
 });
 
 export default router;

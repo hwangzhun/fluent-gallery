@@ -40,6 +40,7 @@ export interface PhotoTagEntity {
  * 照片查询结果（包含标签数组）
  */
 export interface PhotoWithTags extends PhotoEntity {
+  albums?: { id: string; name: string }[];
   tags: string[]; // 标签名称数组
 }
 
@@ -67,6 +68,8 @@ export interface ExifInfo {
  * 创建照片的输入数据（不包含自动生成的字段）
  */
 export interface CreatePhotoInput {
+  albumBeforePhotoIds?: string[];
+  albumIds?: string[];
   url: string;
   thumbnail_url: string;
   title: string;
@@ -82,6 +85,7 @@ export interface CreatePhotoInput {
  * 更新照片的输入数据（所有字段可选）
  */
 export interface UpdatePhotoInput {
+  albumIds?: string[];
   url?: string;
   thumbnail_url?: string;
   title?: string;

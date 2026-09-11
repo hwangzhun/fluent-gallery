@@ -46,6 +46,13 @@ export interface GallerySettings {
   heroImageFit: 'contain' | 'cover';
 }
 
+export interface SeoSettings {
+  title: string; description: string; keywords: string; author: string;
+  canonicalUrl: string; ogTitle: string; ogDescription: string; ogImage: string;
+}
+
+export interface AiSettings { baseUrl: string; model: string; apiKey?: string; hasApiKey: boolean; }
+
 class SettingsService {
   /**
    * 获取管理员设置
@@ -204,6 +211,32 @@ class SettingsService {
       console.error('更新图库设置失败:', error);
       throw error;
     }
+  }
+
+  async getSeoSettings(): Promise<SeoSettings> {
+    const response = await fetch(`${API_BASE_URL}/settings/seo`);
+    const result: ApiResponse<SeoSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '获取 SEO 设置失败');
+    return result.data;
+  }
+
+  async updateSeoSettings(settings: SeoSettings): Promise<void> {
+    const response = await apiFetch('/settings/seo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+    const result: ApiResponse<SeoSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '保存 SEO 设置失败');
+  }
+
+  async getAiSettings(): Promise<AiSettings> {
+    const response = await apiFetch('/settings/ai');
+    const result: ApiResponse<AiSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '获取 API 设置失败');
+    return result.data;
+  }
+
+  async updateAiSettings(settings: Pick<AiSettings, 'baseUrl' | 'model' | 'apiKey'>): Promise<void> {
+    const response = await apiFetch('/settings/ai', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+    const result: ApiResponse<AiSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '保存 API 设置失败');
   }
 }
 

@@ -1,3 +1,4 @@
+import { AlbumSelector } from '../admin/AlbumSelector';
 import type { ReactNode } from 'react';
 import { Aperture, Calendar, Camera, Copyright, Film, Gauge, MapPin, User } from 'lucide-react';
 import { TagSelector } from '../TagSelector';
@@ -74,7 +75,7 @@ export function PhotoPreview({ previewUrl, title }: PhotoPreviewProps) {
 
 interface PhotoBasicFieldsProps {
   data: PhotoFormData;
-  onChange: (field: BatchFieldKey, value: string | number) => void;
+  onChange: (field: BatchFieldKey, value: string | number | string[]) => void;
   sharedFields?: Set<BatchFieldKey>;
   onToggleShared?: (field: BatchFieldKey) => void;
   disabled?: boolean;
@@ -93,6 +94,7 @@ export function PhotoBasicFields({
 
   return (
     <div className="space-y-4">
+      <div><FieldLabel field="albumIds" label="画册" {...toggleProps}>所属画册</FieldLabel><AlbumSelector value={data.albumIds || []} disabled={disabled} onChange={ids => onChange('albumIds', ids)} /></div>
       <div>
         <FieldLabel field="title" label="标题" {...toggleProps}>标题</FieldLabel>
         <input

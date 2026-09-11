@@ -1,6 +1,9 @@
 import type { BatchFieldKey, ExifData, PhotoFormData } from './types';
 
-export const MAX_BATCH_FILES = 20;
+export const MAX_BATCH_FILES = 50;
+export const MAX_BATCH_TOTAL_BYTES = 1024 * 1024 * 1024;
+export const MAX_SINGLE_FILE_BYTES = 50 * 1024 * 1024;
+export const EXIF_PARSE_CONCURRENCY = 4;
 export const UPLOAD_CONCURRENCY = 2;
 
 export function getFileKey(file: File): string {
@@ -14,7 +17,7 @@ export function getPhotoTitle(file: File): string {
 export function updatePhotoFormField(
   data: PhotoFormData,
   field: BatchFieldKey,
-  value: string | number,
+  value: string | number | string[],
 ): PhotoFormData {
   if (!field.startsWith('exif.')) {
     return { ...data, [field]: value };

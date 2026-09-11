@@ -1,6 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import sqlite3 from 'sqlite3';
 import { Database } from 'sqlite3';
-import { readFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
+import { readFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,11 +20,14 @@ if (!existsSync(DB_DIR)) {
 
 // 数据库连接实例
 let db: Database | null = null;
+const transactionContext = new AsyncLocalStorage<Database>();
 
 /**
  * 获取数据库连接（单例模式）
  */
 export function getDatabase(): Database {
+  const transaction = transactionContext.getStore();
+  if (transaction) return transaction;
   if (!db) {
     db = new sqlite3.Database(DB_PATH, (err) => {
       if (err) {
@@ -35,6 +39,7 @@ export function getDatabase(): Database {
 
     // 启用外键约束
     db.run('PRAGMA foreign_keys = ON');
+    db.configure('busyTimeout', 10000);
   }
   return db;
 }
@@ -214,14 +219,16 @@ export async function initDatabase(): Promise<void> {
             });
           }
           
+          await ensureAlbumSchema();
           resolve();
           return;
         } else {
-          // 数据库文件存在但表不完整，关闭连接并删除文件
-          console.log('⚠️  检测到不完整的数据库，正在重置...');
-          await closeDatabase();
-          unlinkSync(DB_PATH);
-          console.log('🗑️  已删除旧的数据库文件');
+          // Repair incomplete legacy schemas additively; never reset user data.
+          const hasPhotos = await dbGet("SELECT name FROM sqlite_master WHERE type='table' AND name='photos'");
+          if (hasPhotos) {
+            if (!await checkColumnExists('likes_count')) await addColumnToPhotos('likes_count', 'INTEGER NOT NULL DEFAULT 0');
+            if (!await checkColumnExists('views_count')) await addColumnToPhotos('views_count', 'INTEGER NOT NULL DEFAULT 0');
+          }
         }
       }
 
@@ -384,4 +391,30 @@ export function dbAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
       resolve(rows as T[]);
     });
   });
+}
+
+// A separate connection keeps concurrent requests outside this transaction.
+export async function withTransaction<T>(action: () => Promise<T>): Promise<T> {
+  if (transactionContext.getStore()) return action();
+  const connection = new sqlite3.Database(DB_PATH);
+  connection.configure('busyTimeout', 10000);
+  return transactionContext.run(connection, async () => {
+    try {
+      await dbRun('PRAGMA foreign_keys = ON');
+      await dbRun('BEGIN IMMEDIATE');
+      const result = await action();
+      await dbRun('COMMIT');
+      return result;
+    } catch (error) {
+      await dbRun('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      await new Promise<void>((resolve, reject) => connection.close(error => error ? reject(error) : resolve()));
+    }
+  });
+}
+
+async function ensureAlbumSchema() {
+  const schema = readFileSync(join(__dirname, 'albums.sql'), 'utf8');
+  await new Promise<void>((resolve, reject) => getDatabase().exec(schema, error => error ? reject(error) : resolve()));
 }

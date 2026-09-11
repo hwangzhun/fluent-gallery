@@ -9,7 +9,7 @@ export interface StoredProcessedImages { url: string; thumbnailUrl: string }
 
 function localPath(prefix: 'photos' | 'thumbs') {
   const date = new Date();
-  return `${prefix}/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${uuidv4()}.webp`;
+  return `${prefix}/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${uuidv4()}.webp`;
 }
 
 export async function storeProcessedImages(display: Buffer, thumbnail: Buffer): Promise<StoredProcessedImages> {

@@ -96,6 +96,14 @@ describe('public gallery', () => {
     expect(galleryProps.onFilterChange).toHaveBeenCalledWith({ year: null, tag: null });
   });
 
+  it('offers an incremental loading control while more photos are available', () => {
+    const onLoadMore = vi.fn();
+    render(<MasonryGallery {...galleryProps} totalPhotos={65} hasMore onLoadMore={onLoadMore} />);
+    expect(screen.getByRole('status')).toHaveTextContent('65');
+    fireEvent.click(screen.getByRole('button', { name: '继续浏览' }));
+    expect(onLoadMore).toHaveBeenCalledOnce();
+  });
+
   it('records only a viewed artwork after quick navigation and cancels the timer on close', async () => {
     vi.useFakeTimers();
     const props = { onClose: vi.fn(), onNext: vi.fn(), onPrev: vi.fn(), hasNext: true, hasPrev: false };

@@ -19,10 +19,26 @@ export interface AdminPhotoPage {
 }
 
 export type AdminPhotoSort = 'latest' | 'likes' | 'views';
+export interface BulkPhotoChanges { year?: number; exif?: Record<string, string>; tags?: { mode: 'append' | 'remove' | 'replace'; values: string[] }; }
+export interface PublicPhotoPage { items: Photo[]; total: number; hasMore: boolean; nextCursor: string | null }
 
 class PhotoService {
-  async getAdminPhotos(options: { page: number; pageSize: 30 | 60 | 120; year?: number; tags?: string[]; search?: string; sort?: AdminPhotoSort; signal?: AbortSignal }): Promise<AdminPhotoPage> {
+  async getPublicPhotoPage(options: { limit?: number; cursor?: string; year?: number; tag?: string; tags?: string[]; search?: string; signal?: AbortSignal } = {}): Promise<PublicPhotoPage> {
+    const params = new URLSearchParams({ limit: String(options.limit || 50) });
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.year) params.set('year', String(options.year));
+    if (options.tags?.length) params.set('tags', options.tags.join(','));
+    else if (options.tag) params.set('tag', options.tag);
+    if (options.search) params.set('search', options.search);
+    const response = await fetch(`${API_BASE_URL}/photos/page?${params}`, { signal: options.signal });
+    const result: ApiResponse<{ items: PhotoWithTags[]; total: number; hasMore: boolean; nextCursor: string | null }> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '获取照片失败');
+    return { ...result.data, items: result.data.items.map(dbPhotoToPhoto) };
+  }
+
+  async getAdminPhotos(options: { page: number; pageSize: 30 | 60 | 120; albumId?: string; year?: number; tags?: string[]; search?: string; sort?: AdminPhotoSort; signal?: AbortSignal }): Promise<AdminPhotoPage> {
     const params = new URLSearchParams({ page: String(options.page), pageSize: String(options.pageSize), sort: options.sort || 'latest' });
+    if (options.albumId) params.set('albumId', options.albumId);
     if (options.year) params.set('year', String(options.year));
     if (options.tags?.length) params.set('tags', options.tags.join(','));
     if (options.search) params.set('search', options.search);
@@ -154,6 +170,7 @@ class PhotoService {
     try {
       // 转换前端格式到数据库格式
       const input: any = {};
+      if (updates.albumIds !== undefined) input.albumIds = updates.albumIds;
       if (updates.url !== undefined) input.url = updates.url;
       if (updates.thumbnailUrl !== undefined) input.thumbnail_url = updates.thumbnailUrl;
       if (updates.title !== undefined) input.title = updates.title;
@@ -190,6 +207,20 @@ class PhotoService {
       console.error('更新照片失败:', error);
       throw error;
     }
+  }
+
+  async batchUpdate(ids: string[], changes: BulkPhotoChanges): Promise<number> {
+    const response = await apiFetch('/photos/batch', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, changes }) });
+    const result: ApiResponse<{ updated: number }> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '批量更新照片失败');
+    return result.data.updated;
+  }
+
+  async batchDelete(ids: string[]): Promise<{ deleted: number; cleanupFailed: number }> {
+    const response = await apiFetch('/photos/batch', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    const result: ApiResponse<{ deleted: number; cleanupFailed: number }> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '批量删除照片失败');
+    return result.data;
   }
 
   /**
