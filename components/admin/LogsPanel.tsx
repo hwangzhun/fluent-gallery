@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Eye, FileText, RefreshCw, Search, Trash2, X } from 'lucide-react';
-import { LogEntry, LogFile, logService } from '../../services/logService';
+import { LogEntry, LogFile, logService } from '../../api/logService';
 import { SelectMenu } from '../SelectMenu';
 
 function ConfirmClear({ file, onCancel, onConfirm }: { file: string; onCancel: () => void; onConfirm: () => void }) { return <div role="dialog" aria-modal="true" className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/45 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-lg font-semibold text-slate-950">清空日志？</h2><p className="mt-2 text-sm leading-6 text-slate-600">将清空 {file || '全部日志文件'}，此操作不可恢复。</p><div className="mt-6 flex justify-end gap-3"><button onClick={onCancel} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">取消</button><button autoFocus onClick={onConfirm} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white">确认清空</button></div></div></div>; }

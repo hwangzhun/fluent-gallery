@@ -7,9 +7,11 @@ import { tmpdir } from 'node:os';
 
 const directory = mkdtempSync(join(tmpdir(), 'fluent-gallery-settings-'));
 process.env.GALLERY_DB_PATH = join(directory, 'gallery.db');
-const { initDatabase, closeDatabase, dbRun } = await import('../database/db');
+delete process.env.LOCAL_PUBLIC_URL;
+const { initDatabase, closeDatabase, dbGet, dbRun } = await import('../database/db');
 const { default: authRouter } = await import('./auth');
 const { default: settingsRouter } = await import('./routes/settings');
+const { loadStorageConfig, migrateLegacyLocalPhotoUrls, resolveLocalUploadDir } = await import('./storage/config');
 const app = express();
 app.use(express.json());
 app.use('/api/auth', authRouter);
@@ -46,8 +48,32 @@ describe('gallery display settings', () => {
 });
 
 describe('object storage settings', () => {
+  it('preserves absolute Docker upload paths and resolves relative local paths', () => {
+    expect(resolveLocalUploadDir('/app/uploads')).toBe('/app/uploads');
+    expect(resolveLocalUploadDir('./uploads')).toBe(join(process.cwd(), 'uploads'));
+  });
+
+  it('rebases legacy localhost upload URLs to the active local public URL', async () => {
+    await dbRun(`INSERT INTO photos (id, url, thumbnail_url, object_key, thumbnail_object_key, title, year, width, height)
+      VALUES ('legacy-local-url', 'http://localhost:3001/uploads/photos/2026/01/image.avif', 'http://127.0.0.1:3001/uploads/thumbs/2026/01/image.avif', 'photos/2026/01/image.avif', 'thumbs/2026/01/image.avif', 'Legacy', 2026, 1200, 800)`);
+    await dbRun(`INSERT INTO photos (id, url, thumbnail_url, title, year, width, height)
+      VALUES ('external-url', 'https://cdn.example.com/image.avif', 'https://cdn.example.com/thumb.avif', 'External', 2026, 1200, 800)`);
+
+    expect(await migrateLegacyLocalPhotoUrls({ mode: 'local', local: { uploadDir: '/app/uploads', publicUrl: '/uploads' } })).toBe(1);
+    expect(await dbGet<{ url: string; thumbnail_url: string }>("SELECT url, thumbnail_url FROM photos WHERE id = 'legacy-local-url'"))
+      .toEqual({ url: '/uploads/photos/2026/01/image.avif', thumbnail_url: '/uploads/thumbs/2026/01/image.avif' });
+    expect(await dbGet<{ url: string }>("SELECT url FROM photos WHERE id = 'external-url'"))
+      .toEqual({ url: 'https://cdn.example.com/image.avif' });
+  });
+
+  it('replaces a saved legacy local public URL with the active environment default', async () => {
+    await dbRun("INSERT OR REPLACE INTO settings (key, value) VALUES ('storage_config', ?)", [JSON.stringify({ mode: 'local', local: { uploadDir: './uploads', publicUrl: 'http://localhost:3001/uploads' } })]);
+    expect((await loadStorageConfig()).local).toEqual({ uploadDir: './uploads', publicUrl: '/uploads' });
+  });
+
   it('exposes fluent_gallery as the default OSS upload directory', async () => {
     const response = await agent.get('/api/settings/storage').expect(200);
+    expect(response.body.data.local).toEqual({ uploadDir: './uploads', publicUrl: '/uploads' });
     expect(response.body.data.oss.uploadDir).toBe('fluent_gallery');
     expect(response.body.data.oss.cloudImageProcessing).toBe(false);
     expect(response.body.data.oss.publicUrl).toBe('');

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { albumService, type Album } from '../../services/albumService';
+import { albumService, type Album } from '../../api/albumService';
 
 export function AlbumSelector({ value, onChange, disabled = false }: { value: string[]; onChange: (ids: string[]) => void; disabled?: boolean }) {
   const [albums, setAlbums] = useState<Album[]>([]);

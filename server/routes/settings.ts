@@ -1,7 +1,7 @@
 import express from 'express';
 import { changeAdminPassword, ensureAuthSchema, requireAdmin } from '../auth';
 import { dbGet, dbRun } from '../../database/db';
-import { loadStorageConfig } from '../storage/config';
+import { getDefaultLocalStorageConfig, loadStorageConfig } from '../storage/config';
 import { getOSSClient, normalizePublicUrl, normalizeUploadDir, validateTencentPublicUrl } from '../storage/oss';
 import type { OSSConfig } from '../storage/config';
 
@@ -50,17 +50,16 @@ router.get('/storage', requireAdmin, async (_request, response) => {
     await ensureSettingsSchema();
     const config = await loadStorageConfig();
     const oss = config.oss;
+    const defaultLocal = getDefaultLocalStorageConfig();
     response.json({ success: true, data: {
       mode: config.mode,
-      local: config.local || { uploadDir: './uploads', publicUrl: 'http://localhost:3001/uploads' },
+      local: config.local || defaultLocal,
       oss: {
         provider: oss?.provider || 'aliyun', uploadDir: oss?.uploadDir || 'fluent_gallery', region: oss?.region || '', bucket: oss?.bucket || '',
         cloudImageProcessing: oss?.cloudImageProcessing === true, publicUrl: normalizePublicUrl(oss?.publicUrl),
         endpoint: oss?.endpoint || '', roleArn: oss?.roleArn || '', roleSessionName: oss?.roleSessionName || 'fluent-gallery-session',
         hasAccessKeyId: Boolean(oss?.accessKeyId), hasAccessKeySecret: Boolean(oss?.accessKeySecret),
       },
-      server: { port: process.env.PORT || '3001' },
-      frontend: { apiBaseUrl: process.env.VITE_API_BASE_URL || 'http://localhost:3001/api' },
     }});
   } catch (error: any) {
     response.status(500).json({ success: false, error: '获取存储配置失败', message: error.message });
@@ -69,8 +68,9 @@ router.get('/storage', requireAdmin, async (_request, response) => {
 
 router.put('/storage', requireAdmin, async (request, response) => {
   try {
-    const { mode, local, oss, server, frontend } = request.body;
+    const { mode, local, oss } = request.body;
     const existing = await loadStorageConfig();
+    const defaultLocal = getDefaultLocalStorageConfig();
     const uploadDir = normalizeUploadDir(typeof oss?.uploadDir === 'string' ? oss.uploadDir : existing.oss?.uploadDir);
     if (uploadDir.split('/').some(segment => segment === '.' || segment === '..') || !/^[\w./-]+$/.test(uploadDir)) {
       return response.status(400).json({ success: false, error: '对象存储上传目录只能包含字母、数字、下划线、短横线、点和斜杠' });
@@ -83,7 +83,10 @@ router.put('/storage', requireAdmin, async (request, response) => {
       bucket: oss?.bucket || existing.oss?.bucket || '', endpoint: oss?.endpoint ?? existing.oss?.endpoint ?? '',
       roleArn: oss?.roleArn ?? existing.oss?.roleArn ?? '', roleSessionName: oss?.roleSessionName || existing.oss?.roleSessionName || 'fluent-gallery-session',
     };
-    const mergedLocal = { uploadDir: local?.uploadDir || existing.local?.uploadDir || './uploads', publicUrl: local?.publicUrl || existing.local?.publicUrl || 'http://localhost:3001/uploads' };
+    const mergedLocal = {
+      uploadDir: local?.uploadDir || existing.local?.uploadDir || defaultLocal.uploadDir,
+      publicUrl: local?.publicUrl || existing.local?.publicUrl || defaultLocal.publicUrl,
+    };
     if (!['local', 'oss'].includes(mode)) return response.status(400).json({ success: false, error: '无效的存储模式' });
     if (mode === 'oss' && (!mergedOss.region || !mergedOss.accessKeyId || !mergedOss.accessKeySecret || !mergedOss.bucket)) return response.status(400).json({ success: false, error: 'OSS配置不完整，请填写区域、密钥和 Bucket' });
     if (mode === 'oss' && mergedOss.provider !== 'tencent' && mergedOss.cloudImageProcessing) {
@@ -93,7 +96,7 @@ router.put('/storage', requireAdmin, async (request, response) => {
       await validateTencentPublicUrl(await getOSSClient(mergedOss as OSSConfig), mergedOss as OSSConfig);
     }
     await ensureSettingsSchema();
-    await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('storage_config', ?, datetime('now'))", [JSON.stringify({ mode, local: mode === 'local' ? mergedLocal : undefined, oss: mode === 'oss' ? mergedOss : undefined, server, frontend })]);
+    await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('storage_config', ?, datetime('now'))", [JSON.stringify({ mode, local: mode === 'local' ? mergedLocal : undefined, oss: mode === 'oss' ? mergedOss : undefined })]);
     response.json({ success: true, message: '配置已保存到数据库（需要重启服务器生效）' });
   } catch (error: any) {
     const inputError = /域名|HTTPS|Bucket|COS/.test(error.message || '');

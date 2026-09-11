@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, Info, Heart, Eye, Share2 } from 'lucide-react';
 import { Photo } from '../types';
-import { likeService, viewService } from '../services';
+import { likeService, viewService } from '../api';
 import { PhotoImage } from './PhotoImage';
 
 interface LightboxProps {

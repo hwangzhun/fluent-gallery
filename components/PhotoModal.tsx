@@ -56,10 +56,10 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm animate-in fade-in duration-200 sm:p-5">
-      <div className={`relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 ${form.isUploadMode && form.items.length > 0 ? 'h-[min(720px,calc(100dvh-2rem))] max-w-6xl' : form.isUploadMode ? 'max-w-3xl' : 'max-h-[90vh] max-w-3xl'}`}>
+    <div role="dialog" aria-modal="true" aria-labelledby="photo-modal-title" className="photo-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-5">
+      <div className={`photo-modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${form.isUploadMode && form.items.length > 0 ? 'h-[min(720px,calc(100dvh-2rem))] max-w-6xl' : form.isUploadMode ? 'max-w-3xl' : 'max-h-[90vh] max-w-3xl'}`}>
         <div className="flex h-15 flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 sm:px-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <h2 id="photo-modal-title" className="flex items-center gap-2 text-lg font-semibold text-gray-900">
             {form.isUploadMode ? <Upload size={20} /> : <Edit size={20} />}
             {form.isUploadMode ? '上传照片' : '编辑照片'}
             {form.isUploadMode && form.items.length > 0 && (

@@ -35,12 +35,6 @@ export interface StorageSettings {
     roleArn?: string;
     roleSessionName?: string;
   };
-  server?: {
-    port: string;
-  };
-  frontend?: {
-    apiBaseUrl: string;
-  };
 }
 
 export interface GallerySettings {

@@ -13,7 +13,7 @@ import {
   UPLOAD_CONCURRENCY,
 } from './batch';
 import { parsePhotoExif } from './exif';
-import { aiService } from '../../services/aiService';
+import { aiService } from '../../api/aiService';
 import type {
   BatchFieldKey,
   BatchUploadPhase,

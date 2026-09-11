@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
 import { Tag, X, Plus } from 'lucide-react';
-import { tagService } from '../services/tagService';
+import { tagService } from '../api/tagService';
 
 interface TagSelectorProps {
   value: string; // 逗号分隔的标签字符串

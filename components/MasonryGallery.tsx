@@ -5,7 +5,7 @@ import { PhotoCard } from './PhotoCard';
 import { PhotoImage } from './PhotoImage';
 import { Lightbox } from './Lightbox';
 import { GalleryFilters } from './GalleryFilters';
-import type { GallerySettings } from '../services/settingsService';
+import type { GallerySettings } from '../api/settingsService';
 import { GalleryFooter } from './GalleryFooter';
 
 interface MasonryGalleryProps {
@@ -97,11 +97,11 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
       {sharedPhotoError && <div className="gallery-share-notice gallery-container" role="status"><span>{sharedPhotoError}</span><button type="button" onClick={onDismissSharedPhotoError}>关闭</button></div>}
       <section className="gallery-hero gallery-container" aria-labelledby="gallery-heading">
         <div className="gallery-hero-copy">
-          <p className="gallery-eyebrow"><span /> A PERSONAL PHOTOGRAPHIC JOURNAL</p>
-          <h1 id="gallery-heading">把日常，<br />留在<span className="gallery-title-accent">光</span>里。</h1>
-          <p className="gallery-hero-english">The poetry of<br /><em>ordinary moments.</em></p>
-          <p className="gallery-hero-description">一些走过的地方，一些停下的瞬间。<br />在光影之间，收藏日常的另一种模样。</p>
-          <button className="gallery-explore" onClick={() => document.getElementById('collection')?.scrollIntoView({ behavior: 'smooth' })}>慢慢看，慢慢发现 <span><ArrowDown size={17} strokeWidth={1.3} /></span></button>
+          <p className="gallery-eyebrow"><span /> FLUENT / A PHOTOGRAPHIC JOURNAL</p>
+          <h1 id="gallery-heading">让光影，<br />继续<span className="gallery-title-accent">流动</span>。</h1>
+          <p className="gallery-hero-english">Images in motion.<br /><em>Moments held still.</em></p>
+          <p className="gallery-hero-description">光线经过，时间经过，生活也不断向前。<br />Fluent 收集那些自然发生、稍纵即逝的片刻——<br />关于城市、街道、人与日常。</p>
+          <button className="gallery-explore" onClick={() => document.getElementById('collection')?.scrollIntoView({ behavior: 'smooth' })}>循光而行 <span><ArrowDown size={17} strokeWidth={1.3} /></span></button>
         </div>
         <div className="gallery-hero-art">
           <div className="gallery-hero-edition"><span>IN THE FRAME</span><span>{featured?.year ?? '光影之间'}</span></div>
@@ -116,9 +116,9 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
       <section id="collection" className="gallery-collection gallery-container" aria-labelledby="collection-heading">
         <div className="gallery-section-heading"><div><p className="gallery-eyebrow">THE COLLECTION</p><h2 id="collection-heading">光影拾集 <span>Selected works</span></h2></div><p className="gallery-count" role="status">{loading ? '正在整理作品…' : error && photos.length === 0 ? '展览暂时未能载入' : <><span>{String(totalPhotos ?? photos.length).padStart(2, '0')}</span> 幅作品 · 每一幅，都是一次停留</>}</p></div>
         <GalleryFilters filter={filter} onFilterChange={onFilterChange} compact={compact} onCompactChange={setCompact} />
-        <div aria-busy={loading}>
+        <div className={`gallery-results ${loading && photos.length > 0 ? 'is-updating' : ''}`} aria-busy={loading}>
           {error && photos.length === 0 ? <div className="gallery-empty" role="alert"><p className="gallery-eyebrow">A LITTLE PAUSE</p><h3>展览暂时未能载入</h3><p>{error}</p><button onClick={onRetry}><RotateCcw size={14} />重新加载</button></div>
-            : loading ? <div className="gallery-grid gallery-skeleton" aria-label="正在加载作品">{[0, 1, 2].map(index => <div key={index} className="gallery-skeleton-item" />)}</div>
+            : loading && photos.length === 0 ? <div className="gallery-grid gallery-skeleton" aria-label="正在加载作品">{[0, 1, 2].map(index => <div key={index} className="gallery-skeleton-item" />)}</div>
               : photos.length === 0 ? <div className="gallery-empty"><p className="gallery-eyebrow">ROOM FOR SOMETHING NEW</p><h3>{filter.tag || filter.year ? '这一页，暂时留白。' : '等待第一束光。'}</h3><p>{filter.tag || filter.year ? '换一个主题或年份，继续寻找喜欢的瞬间。' : '作品上传后，将在这里慢慢展开。'}</p>{(filter.tag || filter.year) && <button onClick={() => onFilterChange({ year: null, tag: null })}>查看全部作品 <ArrowUpRight size={15} /></button>}</div>
                 : <div className={`gallery-grid ${compact ? 'is-compact' : ''}`}>{displayPhotos.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} onClick={() => setSelectedPhotoId(photo.id)} />)}</div>}
         </div>

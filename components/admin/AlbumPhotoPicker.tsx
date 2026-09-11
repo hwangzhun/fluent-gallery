@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Photo } from '../../types';
-import { photoService } from '../../services/photoService';
-import { tagService } from '../../services/tagService';
+import { photoService } from '../../api/photoService';
+import { tagService } from '../../api/tagService';
 import { PhotoImage } from '../PhotoImage';
 
 export function AlbumPhotoPicker({ selected, onChange, disabled, onSessionExpired }: { selected: Photo[]; onChange: (photos: Photo[]) => void; disabled: boolean; onSessionExpired: () => void }) {

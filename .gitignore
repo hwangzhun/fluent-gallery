@@ -13,7 +13,6 @@ coverage/
 .env
 .env.*
 !.env.example
-*.local
 
 # Runtime data (database files and uploaded photos)
 /data/
@@ -23,7 +22,7 @@ coverage/
 *.db-wal
 
 # Logs and diagnostics
-logs/
+/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

@@ -4,12 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AlbumsPanel } from './AlbumsPanel';
-import { albumService } from '../../services/albumService';
-import { photoService } from '../../services/photoService';
+import { albumService } from '../../api/albumService';
+import { photoService } from '../../api/photoService';
 import type { Photo } from '../../types';
-vi.mock('../../services/albumService', () => ({ albumService: { list: vi.fn(), save: vi.fn().mockResolvedValue({}), detail: vi.fn(), remove: vi.fn(), reorder: vi.fn() } }));
-vi.mock('../../services/photoService', () => ({ photoService: { getAdminPhotos: vi.fn() } }));
-vi.mock('../../services/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([2026]), getAllTagNames: vi.fn().mockResolvedValue(['风景']) } }));
+vi.mock('../../api/albumService', () => ({ albumService: { list: vi.fn(), save: vi.fn().mockResolvedValue({}), detail: vi.fn(), remove: vi.fn(), reorder: vi.fn() } }));
+vi.mock('../../api/photoService', () => ({ photoService: { getAdminPhotos: vi.fn() } }));
+vi.mock('../../api/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([2026]), getAllTagNames: vi.fn().mockResolvedValue(['风景']) } }));
 const photo: Photo = { id: 'one', title: '第一张', url: '/one', thumbnailUrl: '/one', width: 1200, height: 800, year: 2026, tags: [], createdAt: '', likesCount: 0, viewsCount: 0 };
 const second = { ...photo, id: 'two', title: '第二张' };
 beforeEach(() => {

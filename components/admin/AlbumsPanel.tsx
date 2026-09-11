@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { albumService, type Album, type AlbumDetail } from '../../services/albumService';
+import { albumService, type Album, type AlbumDetail } from '../../api/albumService';
 import { PhotoImage } from '../PhotoImage';
 import { AlbumPhotoPicker } from './AlbumPhotoPicker';
 

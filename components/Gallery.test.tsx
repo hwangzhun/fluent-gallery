@@ -5,10 +5,10 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MasonryGallery } from './MasonryGallery';
 import { Lightbox } from './Lightbox';
-import { viewService } from '../services';
+import { viewService } from '../api';
 import type { Photo } from '../types';
 
-vi.mock('../services', () => ({
+vi.mock('../api', () => ({
   likeService: {
     isLiked: vi.fn().mockReturnValue(false),
     getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }),
@@ -19,7 +19,7 @@ vi.mock('../services', () => ({
     recordView: vi.fn().mockResolvedValue({ viewsCount: 1 }),
   },
 }));
-vi.mock('../services/tagService', () => ({
+vi.mock('../api/tagService', () => ({
   tagService: {
     getAllTagNames: vi.fn().mockResolvedValue(['街巷']),
     getAvailableYears: vi.fn().mockResolvedValue([2026, 2025]),
@@ -41,6 +41,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('public gallery', () => {
+  it('keeps the current masonry layout mounted while a new filter is loading', () => {
+    const { container } = render(<MasonryGallery {...galleryProps} loading />);
+    expect(screen.getByRole('button', { name: '查看作品：树影' })).toBeInTheDocument();
+    expect(container.querySelector('.gallery-results')).toHaveClass('is-updating');
+    expect(container.querySelector('.gallery-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('presents Fluent as a journal of moments in motion', () => {
+    render(<MasonryGallery {...galleryProps} />);
+    expect(screen.getByRole('heading', { name: '让光影，继续流动。' })).toBeInTheDocument();
+    expect(screen.getByText('Images in motion.', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Fluent 收集那些自然发生、稍纵即逝的片刻——', { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '循光而行' })).toBeInTheDocument();
+  });
+
   it('keeps the cover while filtering and after a reordered response', async () => {
     const { rerender } = render(<MasonryGallery {...galleryProps} />);
     await act(async () => {});

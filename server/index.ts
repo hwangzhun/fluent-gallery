@@ -12,7 +12,7 @@ import logsRoutes from './routes/logs';
 import likeRoutes from './routes/likes';
 import viewRoutes from './routes/views';
 import authRoutes, { ensureAuthSchema, requireAdmin } from './auth';
-import { storageConfig, refreshStorageConfig } from './storage/config';
+import { storageConfig, refreshStorageConfig, resolveLocalUploadDir, migrateLegacyLocalPhotoUrls } from './storage/config';
 import { join } from 'path';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import aiRoutes from './routes/ai';
@@ -25,24 +25,26 @@ const PORT = process.env.PORT || 3001;
 installFileLogger();
 
 // 中间件
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000'))
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
-app.use(cors({
-  credentials: true,
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('不允许的跨域来源'));
-  }
-}));
+if (allowedOrigins.length) {
+  app.use(cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('不允许的跨域来源'));
+    }
+  }));
+}
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 
 // 静态文件服务（本地模式）
 if (storageConfig.mode === 'local' && storageConfig.local) {
-  const uploadDir = join(process.cwd(), storageConfig.local.uploadDir.replace('./', ''));
+  const uploadDir = resolveLocalUploadDir(storageConfig.local.uploadDir);
   if (!existsSync(uploadDir)) {
     mkdirSync(uploadDir, { recursive: true });
   }
@@ -123,6 +125,8 @@ async function startServer() {
 
     // 从数据库刷新存储配置
     await refreshStorageConfig();
+    const migratedLocalUrls = await migrateLegacyLocalPhotoUrls(storageConfig);
+    if (migratedLocalUrls) console.log(`✅ 已迁移 ${migratedLocalUrls} 条旧版本地照片 URL`);
 
     // 启动服务器
     app.listen(PORT, () => {
@@ -138,10 +142,21 @@ async function startServer() {
 
 startServer();
 
-// 优雅关闭
-process.on('SIGINT', async () => {
-  console.log('\n正在关闭服务器...');
-  const { closeDatabase } = await import('../database/db');
-  await closeDatabase();
-  process.exit(0);
-});
+// 优雅关闭：Docker 使用 SIGTERM，本地终端通常使用 SIGINT。
+let shuttingDown = false;
+async function shutdown(signal: NodeJS.Signals) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n收到 ${signal}，正在关闭服务器...`);
+  try {
+    const { closeDatabase } = await import('../database/db');
+    await closeDatabase();
+    process.exit(0);
+  } catch (error) {
+    console.error('关闭数据库失败:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => { void shutdown('SIGINT'); });
+process.on('SIGTERM', () => { void shutdown('SIGTERM'); });

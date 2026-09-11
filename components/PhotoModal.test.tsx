@@ -6,15 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import exifr from 'exifr';
 import type { Photo } from '../types';
 import { PhotoModal, type PhotoUploadData } from './PhotoModal';
-import { aiService } from '../services/aiService';
+import { aiService } from '../api/aiService';
 
-vi.mock('../services/albumService', () => ({ albumService: { list: vi.fn().mockResolvedValue([{ id: 'album-one', name: '旅行', published: false }]) } }));
+vi.mock('../api/albumService', () => ({ albumService: { list: vi.fn().mockResolvedValue([{ id: 'album-one', name: '旅行', published: false }]) } }));
 
 vi.mock('exifr', () => ({ default: { parse: vi.fn() } }));
-vi.mock('../services/tagService', () => ({
+vi.mock('../api/tagService', () => ({
   tagService: { getAllTagNames: vi.fn().mockResolvedValue([]), createTag: vi.fn() },
 }));
-vi.mock('../services/aiService', () => ({
+vi.mock('../api/aiService', () => ({
   aiService: { suggestMetadata: vi.fn(), suggestMetadataForPhoto: vi.fn() },
 }));
 

@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tagService } from '../../services/tagService';
+import { tagService } from '../../api/tagService';
 import { TagsPanel } from './TagsPanel';
 
 const mockTags = vi.hoisted(() => [
@@ -11,7 +11,7 @@ const mockTags = vi.hoisted(() => [
   { id: 2, name: '夜景', created_at: '2026-01-03T00:00:00.000Z', photoCount: 3 },
 ]);
 
-vi.mock('../../services/tagService', () => ({
+vi.mock('../../api/tagService', () => ({
   tagService: {
     getAdminTags: vi.fn().mockResolvedValue(mockTags),
     createTag: vi.fn().mockResolvedValue({ id: 3, name: '人像', created_at: '2026-01-04' }),

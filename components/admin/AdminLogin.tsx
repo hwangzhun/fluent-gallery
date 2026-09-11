@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, LockKeyhole } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { authService } from '../../services/authService';
+import { authService } from '../../api/authService';
 import brandUrl from '../../logo/brand.svg';
 export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
   const [password, setPassword] = useState(''); const [loading, setLoading] = useState(false); const [error, setError] = useState('');

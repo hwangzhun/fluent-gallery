@@ -44,14 +44,14 @@ npm run dev
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `PORT` | `3001` | API 服务端口 |
-| `CORS_ORIGIN` | `http://localhost:3000` | 允许访问 API 的前端来源，多个值用逗号分隔 |
+| `CORS_ORIGIN` | `http://localhost:3000` | 本地开发的跨域前端来源；Docker 同源部署无需配置 |
 | `GALLERY_DB_PATH` | `./data/gallery.db` | SQLite 数据库路径 |
-| `VITE_API_BASE_URL` | `http://localhost:3001/api` | 前端请求的 API 地址 |
-| `STORAGE_MODE` | `local` | `local` 或 `oss` |
-| `LOCAL_UPLOAD_DIR` | `./uploads` | 本地上传目录 |
-| `LOCAL_PUBLIC_URL` | `http://localhost:3001/uploads` | 本地图片公开地址 |
+| `HOST_PORT` | `3000` | Docker 仅在宿主机回环地址暴露的端口 |
+| `LOCAL_UPLOAD_DIR` | `./uploads` | 本地照片存储目录 |
+| `LOCAL_PUBLIC_URL` | `http://localhost:3001/uploads` | 本地开发的照片公开地址；Docker 默认使用同源 `/uploads` |
+| `VITE_API_BASE_URL` | `http://localhost:3001/api` | 前端 API 地址；Docker 构建时固定为同源 `/api` |
 
-对象存储所需的 `OSS_*` 变量及示例请查看 [`.env.example`](.env.example)。`OSS_UPLOAD_DIR` 默认是 `fluent_gallery`，照片与缩略图会统一存放在该目录下。腾讯云可通过 `OSS_CLOUD_IMAGE_PROCESSING=true` 启用数据万象的单请求 AVIF 处理，`OSS_PUBLIC_URL` 可配置已绑定的 HTTPS 图片域名。也可以登录管理后台后配置存储服务。
+存储服务统一在管理后台“设置 → 存储”中配置，包括本地目录、公开地址、对象存储密钥和腾讯云图片处理。AI 接口地址、模型和密钥在“设置 → API 设置”中配置。这些设置保存在数据库中，无需填写到 `.env`。首次未配置存储时默认使用本地存储。
 
 ## 常用命令
 
@@ -72,16 +72,51 @@ components/          React 组件与管理后台
 database/            数据库初始化、迁移与 DAO
 public/              前端静态资源
 server/              Express API、鉴权和存储适配
-services/            前端 API 服务
+api/            前端 API 服务
 data/                本地 SQLite 数据（不会提交）
 uploads/             本地上传文件（不会提交）
 ```
 
 数据库设计见 [`database/README.md`](database/README.md)，API 概览见 [`server/README.md`](server/README.md)。
 
-## 部署提示
+## Docker 部署
 
-`npm run build` 只生成前端静态文件；生产环境还需要单独运行 API 服务，并将 `VITE_API_BASE_URL` 与 `CORS_ORIGIN` 配置为实际域名。`.env`、数据库和上传文件已被 Git 忽略，请通过部署平台的密钥管理和持久化存储单独配置。
+生产镜像将 Vite 前端和 Express API 放在同一容器内，浏览器统一通过同一域名访问页面、`/api`、`/uploads` 和 `/health`。
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl http://127.0.0.1:3000/health
+```
+
+Docker 部署不需要 `.env` 或任何存储配置。Compose 只监听 `127.0.0.1:${HOST_PORT:-3000}`，不直接向公网暴露。首次启动会在 `data/gallery.db` 自动创建空数据库，并默认使用宿主机 `uploads` 目录保存照片。入口点会修复绑定挂载的运行目录权限，再以非 root 用户运行服务。已有本地图库首次以 Docker 启动时，会自动将旧的 `localhost:3001/uploads` 照片地址迁移为当前公开地址。`data`、`uploads` 和 `logs` 都持久化在宿主机，重建镜像不会删除它们。SQLite 只允许运行一个 `gallery` 容器副本，不要横向扩容。
+
+Nginx 反向代理示例：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    client_max_body_size 64m;
+}
+```
+
+应用默认使用本地照片存储，路径为 `/app/uploads`，公开地址为同源 `/uploads`。生产环境使用 `Secure` 管理员 Cookie，因此对外域名必须启用 HTTPS。
+
+### 备份与恢复
+
+为保证 SQLite 备份一致，复制数据前先停止容器：
+
+```bash
+docker compose stop gallery
+mkdir -p backups
+cp data/gallery.db backups/gallery-$(date +%Y%m%d-%H%M%S).db
+docker compose start gallery
+```
+
+恢复时先停止容器，将选定的备份复制为 `data/gallery.db`，再启动容器。如果使用本地照片存储，备份时还应同时备份 `uploads/`。`.env`、数据库、照片和日志均被 `.dockerignore` 排除，不会进入镜像层。
 
 ### 画册
 

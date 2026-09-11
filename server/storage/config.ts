@@ -2,6 +2,8 @@
  * 存储配置管理
  */
 
+import { isAbsolute, resolve } from 'node:path';
+
 export type StorageMode = 'local' | 'oss';
 
 export interface LocalStorageConfig {
@@ -32,6 +34,66 @@ export interface StorageConfig {
   oss?: OSSConfig;
 }
 
+export function getDefaultLocalStorageConfig(): LocalStorageConfig {
+  return {
+    uploadDir: process.env.LOCAL_UPLOAD_DIR || './uploads',
+    publicUrl: process.env.LOCAL_PUBLIC_URL || '/uploads',
+  };
+}
+
+export function resolveLocalUploadDir(uploadDir: string): string {
+  return isAbsolute(uploadDir) ? uploadDir : resolve(process.cwd(), uploadDir);
+}
+
+function isLegacyLocalPublicUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.host === 'localhost:3001' || url.host === '127.0.0.1:3001') && url.pathname.replace(/\/+$/, '') === '/uploads';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rebase URLs written by pre-Docker local installs.  Those installs persisted
+ * http://localhost:3001/uploads/... in SQLite, which points at each visitor's
+ * machine once the gallery is served behind a public Docker deployment.
+ */
+export async function migrateLegacyLocalPhotoUrls(config: StorageConfig): Promise<number> {
+  if (config.mode !== 'local' || !config.local?.publicUrl) return 0;
+
+  const { dbAll, dbRun } = await import('../../database/db');
+  const { deriveStorageKey } = await import('../../database/storageKey');
+  const photos = await dbAll<{ id: string; url: string; thumbnail_url: string; object_key: string | null; thumbnail_object_key: string | null }>(
+    `SELECT id, url, thumbnail_url, object_key, thumbnail_object_key FROM photos`,
+  );
+  const publicUrl = config.local.publicUrl.replace(/\/+$/, '');
+  let migrated = 0;
+
+  const isLegacyLocalUrl = (value: string) => {
+    try {
+      const url = new URL(value);
+      return isLegacyLocalPublicUrl(`${url.origin}/uploads`) && url.pathname.startsWith('/uploads/');
+    } catch {
+      return false;
+    }
+  };
+  const toCurrentPublicUrl = (value: string, objectKey: string | null) => {
+    if (!isLegacyLocalUrl(value)) return value;
+    const key = objectKey || deriveStorageKey(value);
+    return key ? `${publicUrl}/${key.replace(/^\/+/, '')}` : value;
+  };
+
+  for (const photo of photos) {
+    const url = toCurrentPublicUrl(photo.url, photo.object_key);
+    const thumbnailUrl = toCurrentPublicUrl(photo.thumbnail_url, photo.thumbnail_object_key);
+    if (url === photo.url && thumbnailUrl === photo.thumbnail_url) continue;
+    await dbRun('UPDATE photos SET url = ?, thumbnail_url = ? WHERE id = ?', [url, thumbnailUrl, photo.id]);
+    migrated += 1;
+  }
+  return migrated;
+}
+
 /**
  * 从环境变量加载配置
  */
@@ -44,10 +106,7 @@ export function loadStorageConfigFromEnv(): StorageConfig {
 
   // 本地存储配置
   if (mode === 'local') {
-    config.local = {
-      uploadDir: process.env.LOCAL_UPLOAD_DIR || './uploads',
-      publicUrl: process.env.LOCAL_PUBLIC_URL || 'http://localhost:3001/uploads'
-    };
+    config.local = getDefaultLocalStorageConfig();
   }
 
   // OSS 配置
@@ -118,7 +177,14 @@ export async function loadStorageConfigFromDB(): Promise<StorageConfig | null> {
             };
 
             if (savedConfig.local) {
-              config.local = savedConfig.local;
+              config.local = {
+                ...savedConfig.local,
+                // The old default only works for a browser running on the API host.
+                // Re-evaluate it from the current environment for Docker deployments.
+                publicUrl: isLegacyLocalPublicUrl(savedConfig.local.publicUrl)
+                  ? getDefaultLocalStorageConfig().publicUrl
+                  : savedConfig.local.publicUrl,
+              };
             }
 
             if (savedConfig.oss) {

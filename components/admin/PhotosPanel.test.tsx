@@ -4,22 +4,22 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PhotosPanel } from './PhotosPanel';
-import { photoService } from '../../services/photoService';
+import { photoService } from '../../api/photoService';
 
 const photos = vi.hoisted(() => [
   { id: 'one', title: '横幅', url: '/one.jpg', thumbnailUrl: '/one-small.jpg', width: 1200, height: 800, year: 2026, tags: [], createdAt: '2026-01-01', likesCount: 7, viewsCount: 19 },
   { id: 'two', title: '竖幅', url: '/two.jpg', thumbnailUrl: '/two-small.jpg', width: 800, height: 1200, year: 2025, tags: [], createdAt: '2025-01-01', likesCount: 3, viewsCount: 11 },
 ]);
 
-vi.mock('../../services/photoService', () => ({
+vi.mock('../../api/photoService', () => ({
   photoService: {
     getAdminPhotos: vi.fn().mockResolvedValue({ items: photos, total: 2, page: 1, pageSize: 30, totalPages: 1 }),
     updatePhoto: vi.fn(),
     deletePhoto: vi.fn(),
   },
 }));
-vi.mock('../../services/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([]), getAllTagNames: vi.fn().mockResolvedValue([]) } }));
-vi.mock('../../services/photoUploadService', () => ({ photoUploadService: { uploadPhoto: vi.fn() } }));
+vi.mock('../../api/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([]), getAllTagNames: vi.fn().mockResolvedValue([]) } }));
+vi.mock('../../api/photoUploadService', () => ({ photoUploadService: { uploadPhoto: vi.fn() } }));
 vi.mock('../PhotoModal', () => ({ PhotoModal: () => null }));
 
 beforeEach(() => { localStorage.clear(); });
@@ -54,5 +54,22 @@ describe('PhotosPanel thumbnail sizing', () => {
     fireEvent.click(screen.getByRole('button', { name: '网格视图' }));
     expect(screen.getAllByLabelText('点赞 7')).toHaveLength(1);
     expect(screen.getAllByLabelText('浏览 19')).toHaveLength(1);
+  });
+
+  it('keeps the bulk-edit trigger mounted and transitions its visible state', async () => {
+    const { container } = render(<PhotosPanel onSessionExpired={vi.fn()} />);
+    await act(async () => {});
+    const trigger = container.querySelector<HTMLButtonElement>('.studio-bulk-edit-trigger');
+    expect(trigger).toBeDisabled();
+    expect(trigger).not.toHaveClass('is-visible');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 横幅' }));
+    expect(trigger).toBeEnabled();
+    expect(trigger).toHaveClass('is-visible');
+    expect(screen.getByRole('button', { name: '批量修改（1）' })).toBe(trigger);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 横幅' }));
+    expect(trigger).toBeDisabled();
+    expect(trigger).not.toHaveClass('is-visible');
   });
 });

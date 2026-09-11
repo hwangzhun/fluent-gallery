@@ -12,22 +12,22 @@ const mocks = vi.hoisted(() => ({
   getPublicPhotoPage: vi.fn(),
 }));
 
-vi.mock('./services/photoService', () => ({
+vi.mock('./api/photoService', () => ({
   photoService: {
     getPhotoById: mocks.getPhotoById,
     getPublicPhotoPage: mocks.getPublicPhotoPage,
   },
 }));
-vi.mock('./services/settingsService', () => ({
+vi.mock('./api/settingsService', () => ({
   settingsService: {
     getGallerySettings: vi.fn().mockResolvedValue({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' }),
     getSeoSettings: vi.fn().mockResolvedValue({ title: 'Fluent Gallery', description: '', keywords: '', author: '', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '' }),
   },
 }));
-vi.mock('./services/tagService', () => ({
+vi.mock('./api/tagService', () => ({
   tagService: { getAllTagNames: vi.fn().mockResolvedValue([]), getAvailableYears: vi.fn().mockResolvedValue([]) },
 }));
-vi.mock('./services', () => ({
+vi.mock('./api', () => ({
   likeService: { isLiked: vi.fn().mockReturnValue(false), getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }), likePhoto: vi.fn() },
   viewService: { getViewStatus: vi.fn().mockResolvedValue({ viewsCount: 0 }), recordView: vi.fn().mockResolvedValue({ viewsCount: 1 }) },
 }));

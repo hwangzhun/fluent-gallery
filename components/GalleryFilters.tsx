@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Grid2X2, LayoutGrid, X } from 'lucide-react';
 import { FilterState } from '../types';
-import { tagService } from '../services/tagService';
+import { tagService } from '../api/tagService';
 import { SelectMenu } from './SelectMenu';
 
 interface GalleryFiltersProps {

@@ -2,15 +2,11 @@
  * 本地存储服务
  */
 
-import { mkdirSync, existsSync, unlinkSync, writeFileSync } from 'fs';
+import { mkdirSync, existsSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
-import { loadStorageConfig } from '../storage/config';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { loadStorageConfig, resolveLocalUploadDir } from '../storage/config';
 
 /**
  * 确保上传目录存在
@@ -22,7 +18,7 @@ async function ensureUploadDir(): Promise<string> {
     throw new Error('本地存储配置不存在');
   }
 
-  const uploadDir = join(__dirname, '../../', config.uploadDir);
+  const uploadDir = resolveLocalUploadDir(config.uploadDir);
   if (!existsSync(uploadDir)) {
     mkdirSync(uploadDir, { recursive: true });
   }
@@ -138,10 +134,10 @@ export async function deleteLocalFile(url: string): Promise<void> {
     // 从 URL 中提取文件路径
     // 例如：http://localhost:3001/uploads/photos/2024/01/xxx.jpg
     // 提取：photos/2024/01/xxx.jpg
-    const urlObj = new URL(url);
+    const urlObj = new URL(url, 'http://local');
     const relativePath = urlObj.pathname.replace('/uploads/', '');
     
-    const uploadDir = join(__dirname, '../../', config.uploadDir);
+    const uploadDir = resolveLocalUploadDir(config.uploadDir);
     const fullPath = join(uploadDir, relativePath);
 
     if (existsSync(fullPath)) {
@@ -159,7 +155,7 @@ export async function deleteLocalFile(url: string): Promise<void> {
  */
 export function isLocalURL(url: string): boolean {
   try {
-    const urlObj = new URL(url);
+    const urlObj = new URL(url, 'http://local');
     return urlObj.pathname.startsWith('/uploads/');
   } catch {
     return false;

@@ -3,8 +3,8 @@ import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 
 import { HashRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { MasonryGallery } from './components/MasonryGallery';
-import { photoService } from './services/photoService';
-import { GallerySettings, settingsService } from './services/settingsService';
+import { photoService } from './api/photoService';
+import { GallerySettings, settingsService } from './api/settingsService';
 import { FilterState, Photo } from './types';
 
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
@@ -81,7 +81,6 @@ function PublicGalleryPage() {
     setLoading(true);
     setLoadingMore(false);
     setError(null);
-    setPhotos([]);
     setNextCursor(null);
     setHasMore(false);
     photoService.getPublicPhotoPage({ limit: 50, year: filter.year || undefined, tag: filter.tag || undefined, signal: controller.signal })
@@ -95,7 +94,10 @@ function PublicGalleryPage() {
       .catch(error => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         console.error('Failed to load photos', error);
-        if (active) setError('暂时无法连接画廊，请稍后重试。');
+        if (active) {
+          setPhotos([]);
+          setError('暂时无法连接画廊，请稍后重试。');
+        }
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };

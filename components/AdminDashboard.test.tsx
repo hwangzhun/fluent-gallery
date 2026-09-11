@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminDashboard } from './AdminDashboard';
 
-vi.mock('../services/authService', () => ({
+vi.mock('../api/authService', () => ({
   authService: { session: vi.fn().mockResolvedValue({ authenticated: true }), logout: vi.fn() },
 }));
 vi.mock('./admin/PhotosPanel', () => ({ PhotosPanel: () => <div>照片面板</div> }));

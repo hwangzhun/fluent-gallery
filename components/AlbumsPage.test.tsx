@@ -5,11 +5,11 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AlbumsPage } from './AlbumsPage';
-import { albumService } from '../services/albumService';
-import { viewService } from '../services';
+import { albumService } from '../api/albumService';
+import { viewService } from '../api';
 import type { Photo } from '../types';
-vi.mock('../services/albumService', () => ({ albumService: { list: vi.fn(), detail: vi.fn() } }));
-vi.mock('../services', () => ({ likeService: { isLiked: vi.fn().mockReturnValue(false), getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }), likePhoto: vi.fn() }, viewService: { getViewStatus: vi.fn().mockResolvedValue({ viewsCount: 0 }), recordView: vi.fn().mockResolvedValue({ viewsCount: 1 }) } }));
+vi.mock('../api/albumService', () => ({ albumService: { list: vi.fn(), detail: vi.fn() } }));
+vi.mock('../api', () => ({ likeService: { isLiked: vi.fn().mockReturnValue(false), getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }), likePhoto: vi.fn() }, viewService: { getViewStatus: vi.fn().mockResolvedValue({ viewsCount: 0 }), recordView: vi.fn().mockResolvedValue({ viewsCount: 1 }) } }));
 const photo: Photo = { id: 'first', title: '第一张', url: '/first.jpg', thumbnailUrl: '/first-thumb.jpg', width: 800, height: 1200, year: 2026, tags: [], createdAt: '', likesCount: 0, viewsCount: 0 };
 const second = { ...photo, id: 'second', title: '第二张' };
 const album = { id: 'album', name: '旅行', description: '一段旅程', published: true, coverPhotoId: 'second', photoCount: 2, position: 0, previews: [second, photo] };
@@ -44,12 +44,20 @@ describe('album browsing', () => {
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     expect(await screen.findByText('新的一册，静待展开。')).toBeInTheDocument();
   });
-  it('reuses the public gallery footer without enabling album sharing', async () => {
+  it('shares photos opened from an album with a stable deep link', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
     renderAlbums();
-    expect(await screen.findByText('世界很快，')).toBeInTheDocument();
+    expect(await screen.findByText('城市向前，光线移动，人群经过。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /打开画册/ }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /分享作品/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '分享作品：第一张' }));
+    await act(async () => {});
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({
+      title: '第一张',
+      url: expect.stringContaining('#/?photo=first'),
+    }));
+    expect(screen.getByText('已打开分享')).toBeInTheDocument();
   });
   it('handles albums unpublished after listing and keeps the list usable', async () => {
     vi.mocked(albumService.detail).mockRejectedValue(new Error('画册不存在或未发布'));

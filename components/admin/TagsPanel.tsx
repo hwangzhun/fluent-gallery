@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Check, Cloud, Edit3, List, Plus, RefreshCw, Search, Tag, Trash2, X } from 'lucide-react';
-import { tagService, type TagWithCount } from '../../services/tagService';
+import { tagService, type TagWithCount } from '../../api/tagService';
 
 function isSessionError(message: string) {
   return /登录|会话|认证/.test(message);
