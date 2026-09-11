@@ -70,7 +70,7 @@ export function usePhotoModalForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState('');
-  const [tagging, setTagging] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const nextId = useRef(0);
   const previewUrls = useRef(new Set<string>());
   const uploadInFlight = useRef(false);
@@ -319,44 +319,45 @@ export function usePhotoModalForm({
     await uploadTargets(items.filter(item => item.uploadStatus === 'failed'));
   };
 
-  const suggestTags = async () => {
-    if (phase !== 'editing' || items.length === 0 || tagging) return;
-    setTagging(true);
+  const suggestMetadata = async () => {
+    if (phase !== 'editing' || items.length === 0 || analyzing) return;
+    setAnalyzing(true);
     let next = 0;
     const workers = Array.from({ length: Math.min(2, items.length) }, async () => {
       while (next < items.length) {
         const target = items[next++];
-        setItems(current => current.map(item => item.id === target.id ? { ...item, tagStatus: 'loading', tagError: undefined } : item));
+        setItems(current => current.map(item => item.id === target.id ? { ...item, analysisStatus: 'loading', analysisError: undefined } : item));
         try {
-          const suggested = await aiService.suggestTags(target.file);
+          const suggested = await aiService.suggestMetadata(target.file);
           setItems(current => current.map(item => item.id === target.id ? {
             ...item,
-            tagStatus: 'ready',
-            data: { ...item.data, tags: [...new Set([...item.data.tags.split(',').map(value => value.trim()).filter(Boolean), ...suggested])].join(', ') },
+            analysisStatus: 'ready',
+            data: { ...item.data, title: suggested.title, tags: [...new Set([...item.data.tags.split(',').map(value => value.trim()).filter(Boolean), ...suggested.tags])].join(', ') },
           } : item));
         } catch (reason) {
-          setItems(current => current.map(item => item.id === target.id ? { ...item, tagStatus: 'failed', tagError: reason instanceof Error ? reason.message : 'AI 标签生成失败' } : item));
+          setItems(current => current.map(item => item.id === target.id ? { ...item, analysisStatus: 'failed', analysisError: reason instanceof Error ? reason.message : 'AI 照片信息生成失败' } : item));
         }
       }
     });
     await Promise.all(workers);
-    setTagging(false);
+    setAnalyzing(false);
   };
 
-  const suggestEditTags = async () => {
-    if (!isEditMode || !photo || tagging || saving) return;
-    setTagging(true);
+  const suggestEditMetadata = async () => {
+    if (!isEditMode || !photo || analyzing || saving) return;
+    setAnalyzing(true);
     setError(null);
     try {
-      const suggested = await aiService.suggestTagsForPhoto(photo.id);
+      const suggested = await aiService.suggestMetadataForPhoto(photo.id);
       setEditData(current => ({
         ...current,
-        tags: [...new Set([...current.tags.split(',').map(value => value.trim()).filter(Boolean), ...suggested])].join(', '),
+        title: suggested.title,
+        tags: [...new Set([...current.tags.split(',').map(value => value.trim()).filter(Boolean), ...suggested.tags])].join(', '),
       }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'AI 标签生成失败');
+      setError(reason instanceof Error ? reason.message : 'AI 照片信息生成失败');
     } finally {
-      setTagging(false);
+      setAnalyzing(false);
     }
   };
 
@@ -376,10 +377,10 @@ export function usePhotoModalForm({
     phase,
     removeItem,
     retryFailed,
-    suggestTags,
-    tagging,
+    suggestMetadata,
+    analyzing,
     saving,
-    suggestEditTags,
+    suggestEditMetadata,
     selectionNotice,
     setActiveId,
     sharedFields,

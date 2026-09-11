@@ -16,9 +16,13 @@ import { storageConfig, refreshStorageConfig } from './storage/config';
 import { join } from 'path';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import aiRoutes from './routes/ai';
+import { installFileLogger, requestLogger } from './logger';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// 管理后台的系统日志读取 logs/*.log；服务启动时接通实际的日志落盘链路。
+installFileLogger();
 
 // 中间件
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
@@ -34,6 +38,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(requestLogger);
 
 // 静态文件服务（本地模式）
 if (storageConfig.mode === 'local' && storageConfig.local) {

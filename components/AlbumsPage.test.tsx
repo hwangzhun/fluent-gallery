@@ -44,6 +44,13 @@ describe('album browsing', () => {
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     expect(await screen.findByText('新的一册，静待展开。')).toBeInTheDocument();
   });
+  it('reuses the public gallery footer without enabling album sharing', async () => {
+    renderAlbums();
+    expect(await screen.findByText('世界很快，')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /打开画册/ }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /分享作品/ })).not.toBeInTheDocument();
+  });
   it('handles albums unpublished after listing and keeps the list usable', async () => {
     vi.mocked(albumService.detail).mockRejectedValue(new Error('画册不存在或未发布'));
     renderAlbums();

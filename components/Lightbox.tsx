@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Info, Heart, Eye } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Info, Heart, Eye, Share2 } from 'lucide-react';
 import { Photo } from '../types';
 import { likeService, viewService } from '../services';
 import { PhotoImage } from './PhotoImage';
@@ -14,6 +14,7 @@ interface LightboxProps {
   hasPrev: boolean;
   position?: number;
   total?: number;
+  onShare?: (photo: Photo) => Promise<'shared' | 'copied'>;
 }
 
 const ArtworkDetails: React.FC<{ photo: Photo }> = ({ photo }) => {
@@ -67,9 +68,11 @@ const ArtworkDetails: React.FC<{ photo: Photo }> = ({ photo }) => {
   );
 };
 
-export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPrev, hasNext, hasPrev, position, total, albumName }) => {
+export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPrev, hasNext, hasPrev, position, total, albumName, onShare }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareStatus, setShareStatus] = useState('');
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -78,6 +81,20 @@ export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPr
     document.body.style.overflow = 'hidden';
     return () => { dialog?.close(); document.body.style.overflow = previousOverflow; };
   }, []);
+  useEffect(() => { setShareStatus(''); }, [photo.id]);
+  const share = async () => {
+    if (!onShare || sharing) return;
+    setSharing(true);
+    setShareStatus('');
+    try {
+      const result = await onShare(photo);
+      setShareStatus(result === 'copied' ? '链接已复制' : '已打开分享');
+    } catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) setShareStatus('分享失败，请稍后重试');
+    } finally {
+      setSharing(false);
+    }
+  };
   return (
     <dialog
       ref={dialogRef}
@@ -89,7 +106,7 @@ export const Lightbox: React.FC<LightboxProps> = ({ photo, onClose, onNext, onPr
         if (event.key === 'ArrowLeft' && hasPrev) { event.preventDefault(); onPrev(); }
       }}
     >
-      <header className="lightbox-toolbar"><span className={`lightbox-brand ${albumName ? 'is-album' : ''}`}>Fluent Gallery<span> / {albumName || '作品展映'}</span></span><div><button onClick={() => setShowInfo(value => !value)} aria-label="作品信息" aria-expanded={showInfo} aria-controls="artwork-details"><Info size={19} strokeWidth={1.4} /></button><button onClick={onClose} aria-label="关闭大图" autoFocus><X size={22} strokeWidth={1.4} /></button></div></header>
+      <header className="lightbox-toolbar"><span className={`lightbox-brand ${albumName ? 'is-album' : ''}`}>Fluent Gallery<span> / {albumName || '作品展映'}</span></span><div>{shareStatus && <span className="lightbox-share-status" role="status" aria-live="polite">{shareStatus}</span>}{onShare && <button onClick={() => void share()} aria-label={`分享作品：${photo.title}`} disabled={sharing}><Share2 size={19} strokeWidth={1.4} /></button>}<button onClick={() => setShowInfo(value => !value)} aria-label="作品信息" aria-expanded={showInfo} aria-controls="artwork-details"><Info size={19} strokeWidth={1.4} /></button><button onClick={onClose} aria-label="关闭大图" autoFocus><X size={22} strokeWidth={1.4} /></button></div></header>
       <div className="lightbox-stage" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
         <button className="lightbox-previous" disabled={!hasPrev} onClick={onPrev} aria-label="上一幅作品"><ChevronLeft size={25} strokeWidth={1.2} /></button>
         <div className="lightbox-photo" onTouchStart={event => { const touch = event.touches[0]; touchStart.current = event.touches.length === 1 ? { x: touch.clientX, y: touch.clientY } : null; }} onTouchEnd={event => {

@@ -86,18 +86,20 @@ describe('admin photo pagination', () => {
     expect(indexes.map(index => index.name)).toEqual(expect.arrayContaining(['idx_photos_likes_count', 'idx_photos_views_count']));
   });
 
-  it('stores only processed display and thumbnail WebP files', async () => {
+  it('stores only processed display and thumbnail AVIF files', async () => {
     const sharp = (await import('sharp')).default;
     const source = await sharp({ create: { width: 1200, height: 800, channels: 3, background: '#879476' } }).jpeg().toBuffer();
     const response = await agent.post('/api/photos/upload')
       .field('metadata', JSON.stringify({ title: 'Processed', year: 2026, tags: ['upload'], exif: {} }))
       .attach('file', source, { filename: 'source.jpg', contentType: 'image/jpeg' })
       .expect(201);
-    expect(response.body.data.url).toMatch(/\/photos\/\d{4}\/\d{2}\/[^/]+\.webp$/);
-    expect(response.body.data.thumbnail_url).toMatch(/\/thumbs\/\d{4}\/\d{2}\/[^/]+\.webp$/);
-    expect(response.body.processing).toMatchObject({ format: 'webp', width: 1200, height: 800 });
-    const files = readdirSync(join(directory, 'uploads'), { recursive: true }).map(String).filter(name => /\.(jpg|webp)$/i.test(name));
-    expect(files.filter(name => name.endsWith('.webp'))).toHaveLength(2);
+    expect(response.body.data.url).toMatch(/\/photos\/\d{4}\/\d{2}\/[^/]+\.avif$/);
+    expect(response.body.data.thumbnail_url).toMatch(/\/thumbs\/\d{4}\/\d{2}\/[^/]+\.avif$/);
+    expect(response.body.data.object_key).toMatch(/^photos\/\d{4}\/\d{2}\/[^/]+\.avif$/);
+    expect(response.body.data.thumbnail_object_key).toMatch(/^thumbs\/\d{4}\/\d{2}\/[^/]+\.avif$/);
+    expect(response.body.processing).toMatchObject({ format: 'avif', width: 1200, height: 800 });
+    const files = readdirSync(join(directory, 'uploads'), { recursive: true }).map(String).filter(name => /\.(jpg|avif)$/i.test(name));
+    expect(files.filter(name => name.endsWith('.avif'))).toHaveLength(2);
     expect(files.some(name => name.endsWith('.jpg'))).toBe(false);
   });
 

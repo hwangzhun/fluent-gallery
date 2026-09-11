@@ -7,6 +7,8 @@ export interface PhotoEntity {
   id: string;
   url: string;
   thumbnail_url: string;
+  object_key: string | null;
+  thumbnail_object_key: string | null;
   title: string;
   description: string | null;
   year: number;
@@ -72,6 +74,8 @@ export interface CreatePhotoInput {
   albumIds?: string[];
   url: string;
   thumbnail_url: string;
+  object_key?: string | null;
+  thumbnail_object_key?: string | null;
   title: string;
   description?: string;
   year: number;
@@ -88,6 +92,8 @@ export interface UpdatePhotoInput {
   albumIds?: string[];
   url?: string;
   thumbnail_url?: string;
+  object_key?: string | null;
+  thumbnail_object_key?: string | null;
   title?: string;
   description?: string;
   year?: number;

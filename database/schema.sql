@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS photos (
     id TEXT PRIMARY KEY,                    -- 照片唯一标识（UUID 或自定义ID）
     url TEXT NOT NULL,                      -- OSS 原图 URL
     thumbnail_url TEXT NOT NULL,            -- OSS 缩略图 URL
+    object_key TEXT,                        -- 高清图存储 Object Key（迁移时不依赖域名）
+    thumbnail_object_key TEXT,              -- 缩略图存储 Object Key
     title TEXT NOT NULL,                    -- 照片标题
     description TEXT,                       -- 照片描述（可选）
     year INTEGER NOT NULL,                  -- 拍摄年份（用于筛选）

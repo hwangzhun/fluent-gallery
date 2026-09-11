@@ -104,6 +104,42 @@ describe('public gallery', () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
+  it('shares the current lightbox photo with a stable deep link', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    render(<MasonryGallery {...galleryProps} />);
+    fireEvent.click(screen.getByRole('button', { name: '查看作品：树影' }));
+    fireEvent.click(await screen.findByRole('button', { name: '分享作品：树影' }));
+    await act(async () => {});
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({
+      title: '树影',
+      url: expect.stringContaining('#/?photo=one'),
+    }));
+    expect(screen.getByText('已打开分享')).toBeInTheDocument();
+  });
+
+  it('copies the deep link when native sharing is unavailable', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(<MasonryGallery {...galleryProps} />);
+    fireEvent.click(screen.getByRole('button', { name: '查看作品：树影' }));
+    fireEvent.click(await screen.findByRole('button', { name: '分享作品：树影' }));
+    await act(async () => {});
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('#/?photo=one'));
+    expect(screen.getByText('链接已复制')).toBeInTheDocument();
+  });
+
+  it('opens a shared photo outside the loaded collection and clears the link on close', async () => {
+    const onLightboxClose = vi.fn();
+    render(<MasonryGallery {...galleryProps} sharedPhoto={{ ...first, id: 'outside', title: '远方的光' }} onLightboxClose={onLightboxClose} />);
+    expect(await screen.findByRole('dialog', { name: '作品：远方的光' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上一幅作品' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '下一幅作品' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '关闭大图' }));
+    expect(onLightboxClose).toHaveBeenCalledOnce();
+  });
+
   it('records only a viewed artwork after quick navigation and cancels the timer on close', async () => {
     vi.useFakeTimers();
     const props = { onClose: vi.fn(), onNext: vi.fn(), onPrev: vi.fn(), hasNext: true, hasPrev: false };

@@ -1,6 +1,7 @@
 import { dbRun, dbGet, dbAll, withTransaction } from '../db';
 import { setPhotoAlbums } from './albumDao';
 import type { PhotoEntity, PhotoWithTags, CreatePhotoInput, UpdatePhotoInput, ExifInfo } from '../types';
+import { deriveStorageKey } from '../storageKey';
 
 export type PhotoSort = 'latest' | 'likes' | 'views';
 export interface PhotoCursor { createdAt: string; id: string }
@@ -176,15 +177,19 @@ export class PhotoDao {
   private async createPhotoRecord(input: CreatePhotoInput, photoId: string): Promise<PhotoEntity> {
     const exifJson = input.exif ? JSON.stringify(input.exif) : null;
     const now = new Date().toISOString();
+    const objectKey = input.object_key ?? deriveStorageKey(input.url);
+    const thumbnailObjectKey = input.thumbnail_object_key ?? deriveStorageKey(input.thumbnail_url);
 
     // 1. 插入照片记录
     await dbRun(
-      `INSERT INTO photos (id, url, thumbnail_url, title, description, year, width, height, exif, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO photos (id, url, thumbnail_url, object_key, thumbnail_object_key, title, description, year, width, height, exif, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         photoId,
         input.url,
         input.thumbnail_url,
+        objectKey,
+        thumbnailObjectKey,
         input.title,
         input.description || null,
         input.year,
@@ -357,10 +362,26 @@ export class PhotoDao {
     if (input.url !== undefined) {
       updates.push('url = ?');
       values.push(input.url);
+      if (input.object_key === undefined) {
+        updates.push('object_key = ?');
+        values.push(deriveStorageKey(input.url));
+      }
     }
     if (input.thumbnail_url !== undefined) {
       updates.push('thumbnail_url = ?');
       values.push(input.thumbnail_url);
+      if (input.thumbnail_object_key === undefined) {
+        updates.push('thumbnail_object_key = ?');
+        values.push(deriveStorageKey(input.thumbnail_url));
+      }
+    }
+    if (input.object_key !== undefined) {
+      updates.push('object_key = ?');
+      values.push(input.object_key);
+    }
+    if (input.thumbnail_object_key !== undefined) {
+      updates.push('thumbnail_object_key = ?');
+      values.push(input.thumbnail_object_key);
     }
     if (input.title !== undefined) {
       updates.push('title = ?');

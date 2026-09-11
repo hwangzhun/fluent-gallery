@@ -62,11 +62,11 @@ export async function processUploadedImage(file: Pick<Express.Multer.File, 'buff
   const normalized = source.rotate().toColourspace('srgb');
   const displayResult = await normalized.clone()
     .resize({ width: DISPLAY_MAX_EDGE, height: DISPLAY_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 80, effort: 4, smartSubsample: true })
+    .avif({ quality: 80, effort: 4 })
     .toBuffer({ resolveWithObject: true });
   const thumbnail = await normalized.clone()
     .resize({ width: THUMBNAIL_MAX_EDGE, height: THUMBNAIL_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 74, effort: 4, smartSubsample: true })
+    .avif({ quality: 74, effort: 4 })
     .toBuffer();
 
   return {

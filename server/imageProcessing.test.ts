@@ -8,10 +8,10 @@ async function file(width: number, height: number, format: 'jpeg' | 'png' | 'web
 }
 
 describe('processUploadedImage', () => {
-  it('creates separate WebP display and thumbnail images without changing aspect ratio', async () => {
+  it('creates separate AVIF display and thumbnail images without changing aspect ratio', async () => {
     const result = await processUploadedImage(await file(3000, 2000));
     expect([result.width, result.height]).toEqual([2560, 1707]);
-    expect((await sharp(result.display).metadata()).format).toBe('webp');
+    expect((await sharp(result.display).metadata()).format).toBe('heif');
     const thumb = await sharp(result.thumbnail).metadata();
     expect([thumb.width, thumb.height]).toEqual([720, 480]);
   });

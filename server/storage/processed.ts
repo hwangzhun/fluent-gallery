@@ -5,23 +5,32 @@ import { deleteFile } from './index';
 import { getOSSClient, generateFilePath, putOSSFile } from './oss';
 import { loadStorageConfig } from './config';
 
-export interface StoredProcessedImages { url: string; thumbnailUrl: string }
+export interface StoredProcessedImages {
+  url: string;
+  thumbnailUrl: string;
+  objectKey: string;
+  thumbnailObjectKey: string;
+}
 
 function localPath(prefix: 'photos' | 'thumbs') {
   const date = new Date();
-  return `${prefix}/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${uuidv4()}.webp`;
+  return `${prefix}/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${uuidv4()}.avif`;
 }
 
 export async function storeProcessedImages(display: Buffer, thumbnail: Buffer): Promise<StoredProcessedImages> {
   const config = await loadStorageConfig();
   let url = '';
   let thumbnailUrl = '';
+  let objectKey = '';
+  let thumbnailObjectKey = '';
   const localFiles: string[] = [];
   try {
     if (config.mode === 'local' && config.local) {
       const root = isAbsolute(config.local.uploadDir) ? config.local.uploadDir : join(process.cwd(), config.local.uploadDir.replace(/^\.\//, ''));
       const displayPath = localPath('photos');
       const thumbnailPath = localPath('thumbs');
+      objectKey = displayPath;
+      thumbnailObjectKey = thumbnailPath;
       await Promise.all([mkdir(dirname(join(root, displayPath)), { recursive: true }), mkdir(dirname(join(root, thumbnailPath)), { recursive: true })]);
       const displayFile = join(root, displayPath);
       const thumbnailFile = join(root, thumbnailPath);
@@ -33,14 +42,18 @@ export async function storeProcessedImages(display: Buffer, thumbnail: Buffer): 
       thumbnailUrl = `${config.local.publicUrl}/${thumbnailPath}`;
     } else if (config.mode === 'oss' && config.oss) {
       const client = await getOSSClient();
-      const displayPath = generateFilePath('image.webp', 'photos');
-      const thumbnailPath = generateFilePath('image.webp', 'thumbs');
-      url = (await putOSSFile(client, displayPath, display, { mime: 'image/webp' })).url;
-      thumbnailUrl = (await putOSSFile(client, thumbnailPath, thumbnail, { mime: 'image/webp' })).url;
+      const displayPath = generateFilePath('image.avif', 'photos', config.oss.uploadDir);
+      const thumbnailPath = generateFilePath('image.avif', 'thumbs', config.oss.uploadDir);
+      const storedDisplay = await putOSSFile(client, displayPath, display, { mime: 'image/avif' });
+      objectKey = storedDisplay.objectKey;
+      url = storedDisplay.url;
+      const storedThumbnail = await putOSSFile(client, thumbnailPath, thumbnail, { mime: 'image/avif' });
+      thumbnailObjectKey = storedThumbnail.objectKey;
+      thumbnailUrl = storedThumbnail.url;
     } else {
       throw new Error('存储配置不完整');
     }
-    return { url, thumbnailUrl };
+    return { url, thumbnailUrl, objectKey, thumbnailObjectKey };
   } catch (error) {
     await Promise.allSettled(localFiles.length
       ? localFiles.map(file => unlink(file))

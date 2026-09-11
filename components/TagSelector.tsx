@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
 import { Tag, X, Plus } from 'lucide-react';
 import { tagService } from '../services/tagService';
 
@@ -25,6 +25,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // 解析当前标签值 - 使用 useMemo 避免每次渲染都重新计算
@@ -175,11 +176,11 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
     <div className="relative">
       {labelAction ? (
         <div className="mb-1 flex items-center justify-between gap-3">
-          <label className="text-sm font-medium text-gray-700">标签</label>
+          <label htmlFor={inputId} className="text-sm font-medium text-gray-700">标签</label>
           {labelAction}
         </div>
       ) : (
-        <label className="block text-sm font-medium text-gray-700 mb-1">标签</label>
+        <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">标签</label>
       )}
       
       {/* 已选标签显示 */}
@@ -209,6 +210,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
       <div className="relative">
         <Tag size={14} className="absolute left-3 top-3 text-gray-400" />
         <input
+          id={inputId}
           ref={inputRef}
           type="text"
           value={inputValue}

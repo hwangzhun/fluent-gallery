@@ -2,6 +2,8 @@ import express from 'express';
 import { changeAdminPassword, ensureAuthSchema, requireAdmin } from '../auth';
 import { dbGet, dbRun } from '../../database/db';
 import { loadStorageConfig } from '../storage/config';
+import { getOSSClient, normalizePublicUrl, normalizeUploadDir, validateTencentPublicUrl } from '../storage/oss';
+import type { OSSConfig } from '../storage/config';
 
 const router = express.Router();
 
@@ -52,7 +54,8 @@ router.get('/storage', requireAdmin, async (_request, response) => {
       mode: config.mode,
       local: config.local || { uploadDir: './uploads', publicUrl: 'http://localhost:3001/uploads' },
       oss: {
-        provider: oss?.provider || 'aliyun', region: oss?.region || '', bucket: oss?.bucket || '',
+        provider: oss?.provider || 'aliyun', uploadDir: oss?.uploadDir || 'fluent_gallery', region: oss?.region || '', bucket: oss?.bucket || '',
+        cloudImageProcessing: oss?.cloudImageProcessing === true, publicUrl: normalizePublicUrl(oss?.publicUrl),
         endpoint: oss?.endpoint || '', roleArn: oss?.roleArn || '', roleSessionName: oss?.roleSessionName || 'fluent-gallery-session',
         hasAccessKeyId: Boolean(oss?.accessKeyId), hasAccessKeySecret: Boolean(oss?.accessKeySecret),
       },
@@ -68,8 +71,14 @@ router.put('/storage', requireAdmin, async (request, response) => {
   try {
     const { mode, local, oss, server, frontend } = request.body;
     const existing = await loadStorageConfig();
+    const uploadDir = normalizeUploadDir(typeof oss?.uploadDir === 'string' ? oss.uploadDir : existing.oss?.uploadDir);
+    if (uploadDir.split('/').some(segment => segment === '.' || segment === '..') || !/^[\w./-]+$/.test(uploadDir)) {
+      return response.status(400).json({ success: false, error: '对象存储上传目录只能包含字母、数字、下划线、短横线、点和斜杠' });
+    }
     const mergedOss = {
-      provider: oss?.provider || existing.oss?.provider || 'aliyun', region: oss?.region || existing.oss?.region || '',
+      provider: oss?.provider || existing.oss?.provider || 'aliyun', uploadDir, region: oss?.region || existing.oss?.region || '',
+      cloudImageProcessing: typeof oss?.cloudImageProcessing === 'boolean' ? oss.cloudImageProcessing : existing.oss?.cloudImageProcessing === true,
+      publicUrl: normalizePublicUrl(oss?.publicUrl ?? existing.oss?.publicUrl ?? ''),
       accessKeyId: oss?.accessKeyId || existing.oss?.accessKeyId || '', accessKeySecret: oss?.accessKeySecret || existing.oss?.accessKeySecret || '',
       bucket: oss?.bucket || existing.oss?.bucket || '', endpoint: oss?.endpoint ?? existing.oss?.endpoint ?? '',
       roleArn: oss?.roleArn ?? existing.oss?.roleArn ?? '', roleSessionName: oss?.roleSessionName || existing.oss?.roleSessionName || 'fluent-gallery-session',
@@ -77,11 +86,18 @@ router.put('/storage', requireAdmin, async (request, response) => {
     const mergedLocal = { uploadDir: local?.uploadDir || existing.local?.uploadDir || './uploads', publicUrl: local?.publicUrl || existing.local?.publicUrl || 'http://localhost:3001/uploads' };
     if (!['local', 'oss'].includes(mode)) return response.status(400).json({ success: false, error: '无效的存储模式' });
     if (mode === 'oss' && (!mergedOss.region || !mergedOss.accessKeyId || !mergedOss.accessKeySecret || !mergedOss.bucket)) return response.status(400).json({ success: false, error: 'OSS配置不完整，请填写区域、密钥和 Bucket' });
+    if (mode === 'oss' && mergedOss.provider !== 'tencent' && mergedOss.cloudImageProcessing) {
+      return response.status(400).json({ success: false, error: '云端图片处理目前仅支持腾讯云 COS' });
+    }
+    if (mode === 'oss' && mergedOss.provider === 'tencent' && mergedOss.publicUrl) {
+      await validateTencentPublicUrl(await getOSSClient(mergedOss as OSSConfig), mergedOss as OSSConfig);
+    }
     await ensureSettingsSchema();
     await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('storage_config', ?, datetime('now'))", [JSON.stringify({ mode, local: mode === 'local' ? mergedLocal : undefined, oss: mode === 'oss' ? mergedOss : undefined, server, frontend })]);
     response.json({ success: true, message: '配置已保存到数据库（需要重启服务器生效）' });
   } catch (error: any) {
-    response.status(500).json({ success: false, error: '保存存储设置失败', message: error.message });
+    const inputError = /域名|HTTPS|Bucket|COS/.test(error.message || '');
+    response.status(inputError ? 400 : 500).json({ success: false, error: inputError ? error.message : '保存存储设置失败', message: error.message });
   }
 });
 
@@ -92,9 +108,11 @@ router.get('/gallery', async (_request, response) => {
     dbGet<{ value: string }>("SELECT value FROM settings WHERE key = 'gallery_hero_photo_id'"),
     dbGet<{ value: string }>("SELECT value FROM settings WHERE key = 'gallery_hero_image_fit'"),
   ]);
+  const configuredHeroId = heroPhotoRow?.value || '';
+  const heroPhoto = configuredHeroId ? await dbGet<{ id: string }>('SELECT id FROM photos WHERE id = ?', [configuredHeroId]) : undefined;
   response.json({ success: true, data: {
     randomizePhotos: randomizeRow?.value === 'true',
-    heroPhotoId: heroPhotoRow?.value || null,
+    heroPhotoId: heroPhoto?.id || null,
     heroImageFit: heroFitRow?.value === 'cover' ? 'cover' : 'contain',
   } });
 });

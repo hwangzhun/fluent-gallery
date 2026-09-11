@@ -22,6 +22,9 @@ export interface StorageSettings {
   };
   oss?: {
     provider?: 'aliyun' | 'tencent'; // OSS 提供商
+    uploadDir: string;
+    cloudImageProcessing: boolean;
+    publicUrl: string;
     region: string;
     accessKeyId?: string;
     accessKeySecret?: string;

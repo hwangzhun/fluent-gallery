@@ -7,6 +7,9 @@ import { deleteFile } from '../storage';
 import { requireAdmin } from '../auth';
 import { processUploadedImage } from '../imageProcessing';
 import { storeProcessedImages } from '../storage/processed';
+import { dbGet, dbRun } from '../../database/db';
+import { loadStorageConfig } from '../storage/config';
+import { getOSSClient, putTencentProcessedImages, TENCENT_CI_MAX_FILE_SIZE } from '../storage/oss';
 
 const router = express.Router();
 const photoDao = new PhotoDao();
@@ -20,6 +23,16 @@ const upload = multer({
     callback(null, true);
   },
 });
+
+function deleteStoredFile(url: string, objectKey?: string | null) {
+  return objectKey ? deleteFile(url, objectKey) : deleteFile(url);
+}
+
+async function clearDeletedHeroPhoto(ids: string[]) {
+  const settingsTable = await dbGet<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'");
+  if (!settingsTable || ids.length === 0) return;
+  await dbRun(`UPDATE settings SET value = '', updated_at = datetime('now') WHERE key = 'gallery_hero_photo_id' AND value IN (${ids.map(() => '?').join(',')})`, ids);
+}
 
 function encodePhotoCursor(cursor: { createdAt: string; id: string } | null): string | null {
   return cursor ? Buffer.from(JSON.stringify(cursor)).toString('base64url') : null;
@@ -182,7 +195,7 @@ router.patch('/batch', requireAdmin, async (req, res) => {
 
 router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, error: '没有上传文件' });
-  let stored: { url: string; thumbnailUrl: string } | null = null;
+  let stored: { url: string; thumbnailUrl: string; objectKey: string; thumbnailObjectKey: string } | null = null;
   try {
     const metadata = JSON.parse(req.body.metadata || '{}');
     const title = typeof metadata.title === 'string' ? metadata.title.trim() : '';
@@ -191,14 +204,40 @@ router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
       return res.status(400).json({ success: false, error: '标题和有效年份为必填项' });
     }
     const tags: string[] = Array.isArray(metadata.tags) ? [...new Set<string>(metadata.tags.filter((tag: unknown): tag is string => typeof tag === 'string').map((tag: string) => tag.trim()).filter(Boolean))] : [];
-    const processed = await processUploadedImage(req.file);
-    stored = await storeProcessedImages(processed.display, processed.thumbnail);
+    const storageConfig = await loadStorageConfig();
+    const useTencentCloudProcessing = storageConfig.mode === 'oss'
+      && storageConfig.oss?.provider === 'tencent'
+      && storageConfig.oss.cloudImageProcessing;
+    if (useTencentCloudProcessing && req.file.size > TENCENT_CI_MAX_FILE_SIZE) {
+      return res.status(400).json({ success: false, error: '腾讯云云端图片处理仅支持 32 MB 以内的图片' });
+    }
+    const processed = useTencentCloudProcessing
+      ? await putTencentProcessedImages(await getOSSClient(), req.file, storageConfig.oss!)
+      : await (async () => {
+          const images = await processUploadedImage(req.file!);
+          const locations = await storeProcessedImages(images.display, images.thumbnail);
+          return {
+            ...locations,
+            width: images.width,
+            height: images.height,
+            displayBytes: images.display.length,
+            thumbnailBytes: images.thumbnail.length,
+          };
+        })();
+    stored = {
+      url: processed.url,
+      thumbnailUrl: processed.thumbnailUrl,
+      objectKey: processed.objectKey,
+      thumbnailObjectKey: processed.thumbnailObjectKey,
+    };
     const photoId = generatePhotoId();
     await photoDao.createPhoto({
       albumIds: metadata.albumIds,
       albumBeforePhotoIds: metadata.albumBeforePhotoIds,
       url: stored.url,
       thumbnail_url: stored.thumbnailUrl,
+      object_key: stored.objectKey,
+      thumbnail_object_key: stored.thumbnailObjectKey,
       title,
       year,
       tags,
@@ -212,15 +251,18 @@ router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
       data: photo,
       processing: {
         sourceBytes: req.file.size,
-        displayBytes: processed.display.length,
-        thumbnailBytes: processed.thumbnail.length,
+        displayBytes: processed.displayBytes,
+        thumbnailBytes: processed.thumbnailBytes,
         width: processed.width,
         height: processed.height,
-        format: 'webp',
+        format: 'avif',
       },
     });
   } catch (error: any) {
-    if (stored) await Promise.allSettled([deleteFile(stored.url), deleteFile(stored.thumbnailUrl)]);
+    if (stored) await Promise.allSettled([
+      deleteStoredFile(stored.url, stored.objectKey),
+      deleteStoredFile(stored.thumbnailUrl, stored.thumbnailObjectKey),
+    ]);
     const isInputError = error instanceof AlbumInputError || error instanceof SyntaxError || /像素|解码|图片|Input buffer|unsupported/i.test(error.message || '');
     const publicMessage = error instanceof SyntaxError ? '照片元数据格式无效' : error.message;
     console.error('处理上传照片失败:', error);
@@ -342,11 +384,12 @@ router.delete('/batch', requireAdmin, async (req, res) => {
     const photos = await Promise.all(ids.map(id => photoDao.getPhotoById(id)));
     if (photos.some(photo => !photo)) return res.status(404).json({ success: false, error: '部分照片不存在或已被删除' });
     const deleted = await photoDao.batchDeletePhotos(ids);
+    await clearDeletedHeroPhoto(ids);
     const cleanupResults = await Promise.allSettled(photos.flatMap(photo => {
       if (!photo) return [];
       return [
-        ...(photo.url ? [deleteFile(photo.url)] : []),
-        ...(photo.thumbnail_url && photo.thumbnail_url !== photo.url ? [deleteFile(photo.thumbnail_url)] : []),
+        ...(photo.url ? [deleteStoredFile(photo.url, photo.object_key)] : []),
+        ...(photo.thumbnail_url && photo.thumbnail_url !== photo.url ? [deleteStoredFile(photo.thumbnail_url, photo.thumbnail_object_key)] : []),
       ];
     }));
     const cleanupFailed = cleanupResults.filter(result => result.status === 'rejected').length;
@@ -378,7 +421,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     // 删除文件（自动判断存储方式）
     if (photo.url) {
       try {
-        await deleteFile(photo.url);
+        await deleteStoredFile(photo.url, photo.object_key);
       } catch (fileError) {
         console.warn('删除文件失败（继续删除数据库记录）:', fileError);
       }
@@ -387,7 +430,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     // 删除缩略图
     if (photo.thumbnail_url && photo.thumbnail_url !== photo.url) {
       try {
-        await deleteFile(photo.thumbnail_url);
+        await deleteStoredFile(photo.thumbnail_url, photo.thumbnail_object_key);
       } catch (fileError) {
         console.warn('删除缩略图失败:', fileError);
       }
@@ -402,6 +445,8 @@ router.delete('/:id', requireAdmin, async (req, res) => {
         error: '照片不存在'
       });
     }
+
+    await clearDeletedHeroPhoto([id]);
 
     res.json({
       success: true,

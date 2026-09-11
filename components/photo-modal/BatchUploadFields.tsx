@@ -60,9 +60,9 @@ function UploadStatus({ item }: { item: PhotoUploadItem }) {
   if (item.uploadStatus === 'uploading') return <span className="inline-flex items-center gap-1.5 text-blue-600"><LoaderCircle size={13} className="animate-spin" />上传中</span>;
   if (item.uploadStatus === 'success') return <span className="inline-flex items-center gap-1.5 text-emerald-600"><CheckCircle2 size={13} />已完成</span>;
   if (item.uploadStatus === 'failed') return <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={13} />失败</span>;
-  if (item.tagStatus === 'loading') return <span className="inline-flex items-center gap-1.5 text-violet-600"><LoaderCircle size={13} className="animate-spin" />AI 分析中</span>;
-  if (item.tagStatus === 'failed') return <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={13} />AI 标签失败</span>;
-  if (item.tagStatus === 'ready') return <span className="inline-flex items-center gap-1.5 text-violet-600"><CheckCircle2 size={13} />标签已生成</span>;
+  if (item.analysisStatus === 'loading') return <span className="inline-flex items-center gap-1.5 text-violet-600"><LoaderCircle size={13} className="animate-spin" />AI 分析中</span>;
+  if (item.analysisStatus === 'failed') return <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={13} />AI 生成失败</span>;
+  if (item.analysisStatus === 'ready') return <span className="inline-flex items-center gap-1.5 text-violet-600"><CheckCircle2 size={13} />标题与标签已生成</span>;
   if (item.exifStatus === 'loading') return <span className="inline-flex items-center gap-1.5 text-slate-500"><LoaderCircle size={13} className="animate-spin" />读取信息</span>;
   return <span className="text-slate-500">等待上传</span>;
 }
@@ -217,7 +217,7 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
             {panel === 'basic' ? (
               <>
                 <PhotoBasicFields data={activeItem.data} onChange={onChange} sharedFields={sharedFields} onToggleShared={onToggleShared} disabled={disabled} editorKey={activeItem.id} />
-                {activeItem.tagError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 自动打标签失败：{activeItem.tagError}</p>}
+                {activeItem.analysisError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 生成标题与标签失败：{activeItem.analysisError}</p>}
                 <div className="mt-5 rounded-xl bg-blue-50 px-3.5 py-3 text-xs leading-5 text-blue-700"><span className="font-medium">公共字段：</span>打开开关后，再次修改该字段会同步到当前批次。</div>
               </>
             ) : (

@@ -6,12 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import exifr from 'exifr';
 import type { Photo } from '../types';
 import { PhotoModal, type PhotoUploadData } from './PhotoModal';
+import { aiService } from '../services/aiService';
 
 vi.mock('../services/albumService', () => ({ albumService: { list: vi.fn().mockResolvedValue([{ id: 'album-one', name: '旅行', published: false }]) } }));
 
 vi.mock('exifr', () => ({ default: { parse: vi.fn() } }));
 vi.mock('../services/tagService', () => ({
   tagService: { getAllTagNames: vi.fn().mockResolvedValue([]), createTag: vi.fn() },
+}));
+vi.mock('../services/aiService', () => ({
+  aiService: { suggestMetadata: vi.fn(), suggestMetadataForPhoto: vi.fn() },
 }));
 
 function file(name: string, lastModified = 1) {
@@ -40,6 +44,7 @@ describe('PhotoModal batch upload', () => {
   beforeEach(() => {
     previewIndex = 0;
     vi.mocked(exifr.parse).mockResolvedValue(undefined);
+    vi.mocked(aiService.suggestMetadata).mockResolvedValue({ title: '风里的光', tags: ['日常', '光影', '街头'] });
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: vi.fn(() => `blob:preview-${previewIndex++}`),
@@ -52,7 +57,17 @@ describe('PhotoModal batch upload', () => {
 
   afterEach(() => {
     cleanup();
+    document.body.style.overflow = '';
     vi.restoreAllMocks();
+  });
+
+  it('locks background scrolling while open and restores it when closed', () => {
+    document.body.style.overflow = 'auto';
+    const { rerender } = render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} />);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    rerender(<PhotoModal isOpen={false} mode="upload" onClose={vi.fn()} />);
+    expect(document.body.style.overflow).toBe('auto');
   });
 
   it('appends photos and only synchronizes a public field after it is edited', async () => {
@@ -69,7 +84,7 @@ describe('PhotoModal batch upload', () => {
     expect(screen.getByLabelText('标题')).toHaveValue('first');
     fireEvent.click(screen.getByRole('tab', { name: '拍摄信息' }));
     expect(screen.getByLabelText('相机型号')).toHaveValue('first.jpg');
-    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(10);
+    expect(container.querySelectorAll('[role="switch"]')).toHaveLength(10);
     fireEvent.click(screen.getByRole('tab', { name: '基本信息' }));
 
     fireEvent.click(screen.getByLabelText('将标题设为公共字段'));
@@ -86,7 +101,7 @@ describe('PhotoModal batch upload', () => {
     expect(screen.getByLabelText('标题')).toHaveValue('third');
 
     expect(screen.getByLabelText('将画册设为公共字段')).toBeInTheDocument();
-    expect(screen.getByLabelText('将标题设为公共字段')).toBeChecked();
+    expect(screen.getByLabelText('将标题设为公共字段')).toHaveAttribute('aria-checked', 'true');
   });
 
   it('caps a batch at 50 photos instead of starting unbounded EXIF work', async () => {
@@ -96,6 +111,26 @@ describe('PhotoModal batch upload', () => {
     await waitFor(() => expect(screen.getByLabelText('照片数量：50')).toBeInTheDocument());
     expect(screen.getByText(/1 个文件未加入/)).toBeInTheDocument();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(50);
+  });
+
+  it('generates a title and merges tags for every queued photo', async () => {
+    vi.mocked(aiService.suggestMetadata)
+      .mockResolvedValueOnce({ title: '第一束光', tags: ['日常', '光影', '街头'] })
+      .mockResolvedValueOnce({ title: '风经过街角', tags: ['城市', '光影', '街头'] });
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('first.jpg'), file('second.jpg')] } });
+    const tagInput = await screen.findByLabelText('标签');
+    fireEvent.change(tagInput, { target: { value: '已有' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'AI 生成标题与标签' }));
+    await waitFor(() => expect(screen.getByLabelText('标题')).toHaveValue('第一束光'));
+    expect(screen.getByText('已有')).toBeInTheDocument();
+    expect(screen.getByText('日常')).toBeInTheDocument();
+    expect(screen.getByText('光影')).toBeInTheDocument();
+    expect(screen.getByText('街头')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 2 张：风经过街角' }));
+    expect(screen.getByLabelText('标题')).toHaveValue('风经过街角');
+    expect(aiService.suggestMetadata).toHaveBeenCalledTimes(2);
   });
 
   it('continues after a failure, shows results, and retries only failed photos', async () => {
@@ -220,7 +255,10 @@ describe('PhotoModal batch upload', () => {
 });
 
 describe('PhotoModal edit mode', () => {
-  afterEach(cleanup);
+  beforeEach(() => {
+    vi.mocked(aiService.suggestMetadataForPhoto).mockResolvedValue({ title: '城市睡在雨里', tags: ['night', '雨夜', '街头'] });
+  });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   it('preserves the existing edit contract', async () => {
     const photo: Photo = {
@@ -252,5 +290,17 @@ describe('PhotoModal edit mode', () => {
       exif: expect.objectContaining({ camera: 'Sony A7', city: '香港' }),
     })));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('overwrites the title and merges tags without saving automatically', async () => {
+    const photo: Photo = { id: 'photo-ai', url: '/full.jpg', thumbnailUrl: '/thumb.jpg', title: '旧标题', tags: ['night'], year: 2026, width: 1200, height: 800, createdAt: '', likesCount: 0, viewsCount: 0 };
+    const onUpdate = vi.fn();
+    render(<PhotoModal isOpen mode="edit" photo={photo} onClose={vi.fn()} onUpdate={onUpdate} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 生成标题与标签' }));
+    await waitFor(() => expect(screen.getByLabelText('标题')).toHaveValue('城市睡在雨里'));
+    expect(screen.getByText('night')).toBeInTheDocument();
+    expect(screen.getByText('雨夜')).toBeInTheDocument();
+    expect(screen.getByText('街头')).toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

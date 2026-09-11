@@ -19,6 +19,7 @@ export interface STSCredentials {
   bucket: string;
   endpoint?: string;
   provider?: 'aliyun' | 'tencent'; // OSS 提供商
+  uploadDir: string;
 }
 
 interface OSSConfig {
@@ -27,6 +28,7 @@ interface OSSConfig {
   bucket?: string;
   endpoint?: string;
   publicUrl?: string;
+  uploadDir?: string;
 }
 
 class OSSService {
@@ -97,7 +99,7 @@ export const ossService = new OSSService();
 /**
  * 生成文件路径
  */
-export function generateFilePath(filename: string, prefix: string = 'photos'): string {
+export function generateFilePath(filename: string, prefix: string = 'photos', uploadDir: string = 'fluent_gallery'): string {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -111,7 +113,8 @@ export function generateFilePath(filename: string, prefix: string = 'photos'): s
   const random = Math.random().toString(36).substring(2, 9);
   const uniqueFilename = `${timestamp}-${random}.${ext}`;
   
-  return `${prefix}/${year}/${month}/${day}/${uniqueFilename}`;
+  const root = uploadDir.trim().replace(/^\/+|\/+$/g, '').replace(/\/{2,}/g, '/') || 'fluent_gallery';
+  return `${root}/${prefix}/${year}/${month}/${day}/${uniqueFilename}`;
 }
 
 /**

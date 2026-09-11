@@ -36,6 +36,12 @@ tsx server/index.ts
 - `POST /api/tags` - 创建新标签
 - `DELETE /api/tags/:id` - 删除标签
 
+### AI 照片信息 API
+
+- `POST /api/ai/metadata` - 管理员上传单张照片，生成 `{ title, tags }`；标题为 15 字以内的中文标题，标签优先复用已有标签。
+- `POST /api/ai/metadata/photo` - 管理员提交 `{ photoId }`，为已存照片生成标题与标签。
+- 原有 `POST /api/ai/tags` 和 `POST /api/ai/tags/photo` 保留兼容。
+
 ## 数据库
 
 数据库文件存储在 `data/gallery.db`（自动创建）

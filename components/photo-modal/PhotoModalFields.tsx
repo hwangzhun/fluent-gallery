@@ -23,18 +23,20 @@ export function SharedFieldToggle({
   const checked = sharedFields.has(field);
 
   return (
-    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-normal text-gray-500">
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={`将${label}设为公共字段`}
+      onClick={() => onToggleShared(field)}
+      disabled={disabled}
+      className="inline-flex items-center gap-1.5 text-xs font-normal text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+    >
       <span>公共</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={() => onToggleShared(field)}
-        disabled={disabled}
-        aria-label={`将${label}设为公共字段`}
-        className="peer sr-only"
-      />
-      <span className="relative h-4 w-7 rounded-full bg-gray-200 transition-colors peer-checked:bg-blue-600 peer-disabled:cursor-not-allowed peer-disabled:opacity-60 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3" />
-    </label>
+      <span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-200'}`}>
+        <span className={`absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-3' : ''}`} />
+      </span>
+    </button>
   );
 }
 

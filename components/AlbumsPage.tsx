@@ -4,6 +4,7 @@ import { Navbar } from './Navbar';
 import { Lightbox } from './Lightbox';
 import { PhotoImage } from './PhotoImage';
 import { albumService, type Album, type AlbumDetail } from '../services/albumService';
+import { GalleryFooter } from './GalleryFooter';
 
 export function AlbumsPage() {
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -47,5 +48,5 @@ export function AlbumsPage() {
         <span className="album-count">{opening === album.id ? '正在打开…' : `${album.photoCount} 张照片`}</span>
       </button>)}
     </div>}
-  </main>{selected && <Lightbox photo={selected.photos[index]} albumName={selected.name} position={index + 1} total={selected.photos.length} hasPrev={index > 0} hasNext={index < selected.photos.length - 1} onPrev={() => setIndex(i => Math.max(0, i - 1))} onNext={() => setIndex(i => Math.min(selected.photos.length - 1, i + 1))} onClose={close} />}</div>;
+  </main><GalleryFooter />{selected && <Lightbox photo={selected.photos[index]} albumName={selected.name} position={index + 1} total={selected.photos.length} hasPrev={index > 0} hasNext={index < selected.photos.length - 1} onPrev={() => setIndex(i => Math.max(0, i - 1))} onNext={() => setIndex(i => Math.min(selected.photos.length - 1, i + 1))} onClose={close} />}</div>;
 }

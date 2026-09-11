@@ -13,6 +13,9 @@ export type OSSProvider = 'aliyun' | 'tencent';
 
 export interface OSSConfig {
   provider?: OSSProvider; // OSS 提供商：aliyun 或 tencent，默认为 aliyun
+  uploadDir: string; // Bucket 内的统一路径前缀
+  cloudImageProcessing: boolean;
+  publicUrl: string;
   region: string;
   accessKeyId: string;
   accessKeySecret: string;
@@ -51,6 +54,9 @@ export function loadStorageConfigFromEnv(): StorageConfig {
   if (mode === 'oss') {
     const ossConfig: OSSConfig = {
       provider: (process.env.OSS_PROVIDER as OSSProvider) || 'aliyun',
+      uploadDir: process.env.OSS_UPLOAD_DIR || 'fluent_gallery',
+      cloudImageProcessing: process.env.OSS_CLOUD_IMAGE_PROCESSING === 'true',
+      publicUrl: process.env.OSS_PUBLIC_URL || '',
       region: process.env.OSS_REGION || '',
       accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
       accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
@@ -116,7 +122,12 @@ export async function loadStorageConfigFromDB(): Promise<StorageConfig | null> {
             }
 
             if (savedConfig.oss) {
-              config.oss = savedConfig.oss;
+              config.oss = {
+                ...savedConfig.oss,
+                uploadDir: savedConfig.oss.uploadDir || 'fluent_gallery',
+                cloudImageProcessing: savedConfig.oss.cloudImageProcessing === true,
+                publicUrl: savedConfig.oss.publicUrl || '',
+              };
             }
 
             resolve(config);

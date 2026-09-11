@@ -156,6 +156,8 @@ body:has(.gallery-shell) { min-width: 0; }
 .gallery-load-more { display: grid; place-items: center; gap: 10px; padding: 28px 0 70px; color: var(--muted); font-size: 12px; }
 .gallery-load-more button { display: inline-flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--accent); padding: 10px 2px 7px; color: var(--ink); font-size: 12px; letter-spacing: 1px; }
 .gallery-load-more button:disabled { cursor: wait; opacity: .65; }
+.gallery-share-notice { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 48px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.gallery-share-notice button { flex-shrink: 0; color: var(--ink); border-bottom: 1px solid var(--accent); padding-block: 4px; }
 .gallery-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; padding-top: 54px; border-top: 1px solid var(--line); }
 .gallery-footer-note > p:nth-child(2) { font: 31px/1.7 var(--serif); letter-spacing: 4px; margin: 18px 0; }
 .gallery-footer-note > p:nth-child(2) span { color: #8a8e7c; }
@@ -178,9 +180,11 @@ body:has(.gallery-shell) { min-width: 0; }
 .lightbox-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0 36px; border-bottom: 1px solid #ffffff12; z-index: 2; }
 .lightbox-brand { font: 20px Georgia, serif; }
 .lightbox-brand > span { font: 10px ui-sans-serif, system-ui, sans-serif; color: #a2a699; margin-left: 16px; letter-spacing: 2px; }
-.lightbox-toolbar > div { display: flex; gap: 12px; }
+.lightbox-toolbar > div { display: flex; align-items: center; gap: 12px; }
 .lightbox-toolbar button { width: 42px; height: 42px; display: grid; place-items: center; }
 .lightbox-toolbar button:hover, .lightbox-toolbar button[aria-expanded="true"] { background: #ffffff0e; }
+.lightbox-toolbar button:disabled { opacity: .45; cursor: wait; }
+.lightbox-share-status { color: #b9beae; font-size: 11px; letter-spacing: .5px; white-space: nowrap; }
 .lightbox-stage { min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 28px 90px; }
 .lightbox-photo { min-width: 0; display: contents; }
 .lightbox-photo .artwork-image { display: contents; }
@@ -254,6 +258,9 @@ body:has(.gallery-shell) { min-width: 0; }
   .gallery-featured-frame { padding: 13px; }
   .gallery-hero-art figcaption { font-size: 9px; }
   .gallery-featured-open { right: 22px; bottom: 22px; opacity: 1; }
+  .lightbox-toolbar { padding-inline: 18px; }
+  .lightbox-toolbar > div { gap: 3px; }
+  .lightbox-share-status { position: absolute; top: 64px; right: 18px; padding: 6px 9px; background: #292d26; border: 1px solid #ffffff14; }
   .gallery-collection { padding-top: 29px; }
   .gallery-section-heading { align-items: start; flex-direction: column; gap: 8px; }
   .gallery-section-heading h2 { font-size: 25px; letter-spacing: 2px; }

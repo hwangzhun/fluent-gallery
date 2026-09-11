@@ -51,7 +51,7 @@ npm run dev
 | `LOCAL_UPLOAD_DIR` | `./uploads` | 本地上传目录 |
 | `LOCAL_PUBLIC_URL` | `http://localhost:3001/uploads` | 本地图片公开地址 |
 
-对象存储所需的 `OSS_*` 变量及示例请查看 [`.env.example`](.env.example)。也可以登录管理后台后配置存储服务。
+对象存储所需的 `OSS_*` 变量及示例请查看 [`.env.example`](.env.example)。`OSS_UPLOAD_DIR` 默认是 `fluent_gallery`，照片与缩略图会统一存放在该目录下。腾讯云可通过 `OSS_CLOUD_IMAGE_PROCESSING=true` 启用数据万象的单请求 AVIF 处理，`OSS_PUBLIC_URL` 可配置已绑定的 HTTPS 图片域名。也可以登录管理后台后配置存储服务。
 
 ## 常用命令
 

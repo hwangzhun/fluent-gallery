@@ -63,7 +63,8 @@ router.get('/sts', async (req, res) => {
         region: credentials.region,
         bucket: credentials.bucket,
         endpoint: config.oss.endpoint,
-        provider: credentials.provider || config.oss.provider || 'aliyun'
+        provider: credentials.provider || config.oss.provider || 'aliyun',
+        uploadDir: config.oss.uploadDir
       }
     });
   } catch (error: any) {
@@ -102,7 +103,8 @@ router.get('/config', async (req, res) => {
           mode: 'oss',
           region: config.oss?.region,
           bucket: config.oss?.bucket,
-          endpoint: config.oss?.endpoint
+          endpoint: config.oss?.endpoint,
+          uploadDir: config.oss?.uploadDir
         }
       });
     } else {
@@ -166,7 +168,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     // 生成文件路径
     const filename = req.file.originalname || 'upload.jpg';
-    const filePath = generateFilePath(filename, 'photos');
+    const filePath = generateFilePath(filename, 'photos', config.oss.uploadDir);
     console.log('📝 生成的文件路径:', filePath);
     
     // 获取 OSS 客户端

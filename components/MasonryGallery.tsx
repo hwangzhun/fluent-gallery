@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUpRight, ArrowUp, LoaderCircle, RotateCcw } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUpRight, LoaderCircle, RotateCcw } from 'lucide-react';
 import { FilterState, Photo } from '../types';
 import { PhotoCard } from './PhotoCard';
 import { PhotoImage } from './PhotoImage';
 import { Lightbox } from './Lightbox';
 import { GalleryFilters } from './GalleryFilters';
 import type { GallerySettings } from '../services/settingsService';
+import { GalleryFooter } from './GalleryFooter';
 
 interface MasonryGalleryProps {
   photos: Photo[];
@@ -17,9 +18,13 @@ interface MasonryGalleryProps {
   error: string | null;
   filter: FilterState;
   gallerySettings: GallerySettings;
+  sharedPhoto?: Photo | null;
+  sharedPhotoError?: string | null;
   onFilterChange: (filter: Partial<FilterState>) => void;
   onLoadMore?: () => void;
   onRetry: () => void;
+  onDismissSharedPhotoError?: () => void;
+  onLightboxClose?: () => void;
 }
 
 function shufflePhotos(items: Photo[]): Photo[] {
@@ -31,7 +36,7 @@ function shufflePhotos(items: Photo[]): Photo[] {
   return shuffled;
 }
 
-export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPhotos, hasMore = false, loadingMore = false, configuredHero = null, loading, error, filter, gallerySettings, onFilterChange, onLoadMore, onRetry }) => {
+export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPhotos, hasMore = false, loadingMore = false, configuredHero = null, sharedPhoto = null, sharedPhotoError = null, loading, error, filter, gallerySettings, onFilterChange, onLoadMore, onRetry, onDismissSharedPhotoError, onLightboxClose }) => {
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
   const [displayPhotos, setDisplayPhotos] = useState<Photo[]>(photos);
@@ -49,8 +54,34 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
   useEffect(() => {
     setDisplayPhotos(gallerySettings.randomizePhotos && filter.tag === null && filter.year === null ? shufflePhotos(photos) : photos);
   }, [photos, filter.tag, filter.year, gallerySettings.randomizePhotos]);
-  const selectedPhoto = displayPhotos.find(photo => photo.id === selectedPhotoId) ?? (featured?.id === selectedPhotoId ? featured : null);
+  const selectedPhoto = displayPhotos.find(photo => photo.id === selectedPhotoId) ?? (featured?.id === selectedPhotoId ? featured : null) ?? (sharedPhoto?.id === selectedPhotoId ? sharedPhoto : null);
   const selectedIndex = displayPhotos.findIndex(photo => photo.id === selectedPhotoId);
+
+  useEffect(() => {
+    if (sharedPhoto) setSelectedPhotoId(sharedPhoto.id);
+  }, [sharedPhoto]);
+
+  const sharePhoto = useCallback(async (photo: Photo): Promise<'shared' | 'copied'> => {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.hash = `/?photo=${encodeURIComponent(photo.id)}`;
+    const data = {
+      title: photo.title,
+      text: `分享来自 Fluent Gallery 的摄影作品《${photo.title}》`,
+      url: shareUrl.toString(),
+    };
+    if (typeof navigator.share === 'function') {
+      await navigator.share(data);
+      return 'shared';
+    }
+    if (!navigator.clipboard?.writeText) throw new Error('当前浏览器不支持分享或复制链接');
+    await navigator.clipboard.writeText(data.url);
+    return 'copied';
+  }, []);
+
+  const closeLightbox = () => {
+    setSelectedPhotoId(null);
+    onLightboxClose?.();
+  };
 
   useEffect(() => {
     if (!hasMore || loading || loadingMore || error || !onLoadMore || !loadMoreRef.current || typeof IntersectionObserver === 'undefined') return;
@@ -63,6 +94,7 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
 
   return (
     <main>
+      {sharedPhotoError && <div className="gallery-share-notice gallery-container" role="status"><span>{sharedPhotoError}</span><button type="button" onClick={onDismissSharedPhotoError}>关闭</button></div>}
       <section className="gallery-hero gallery-container" aria-labelledby="gallery-heading">
         <div className="gallery-hero-copy">
           <p className="gallery-eyebrow"><span /> A PERSONAL PHOTOGRAPHIC JOURNAL</p>
@@ -94,13 +126,9 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
         {!loading && !error && photos.length > 0 && !hasMore && <div className="gallery-endnote"><span /><p>目光停留的地方，故事还在继续。</p><span /></div>}
       </section>
 
-      <footer id="gallery-note" className="gallery-footer gallery-container">
-        <div className="gallery-footer-note"><p className="gallery-eyebrow">A NOTE FROM THE GALLERY</p><p>世界很快，<br /><span>我们慢慢看。</span></p><div>摄影是与日常的一场温柔对话。<br />谢谢你在这里，为一个瞬间停留。</div></div>
-        <div className="gallery-footer-signature"><span className="gallery-footer-wordmark">Fluent<span> Gallery.</span></span><p>A small collection of things worth seeing.</p><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>回到开始 <ArrowUp size={15} /></button></div>
-        <div className="gallery-footer-bottom"><span>© 2026 Fluent Gallery. Created by <a href="https://github.com/hwangzhun" target="_blank" rel="noopener noreferrer">Hwangzhun</a>. All rights reserved.</span><span>以影像，珍藏所见。</span><span>MADE OF LIGHT &amp; TIME</span></div>
-      </footer>
+      <GalleryFooter />
 
-      {selectedPhoto && <Lightbox photo={selectedPhoto} onClose={() => setSelectedPhotoId(null)} onNext={() => { if (selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1) setSelectedPhotoId(displayPhotos[selectedIndex + 1].id); }} onPrev={() => { if (selectedIndex > 0) setSelectedPhotoId(displayPhotos[selectedIndex - 1].id); }} hasNext={selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1} hasPrev={selectedIndex > 0} position={selectedIndex >= 0 ? selectedIndex + 1 : undefined} total={displayPhotos.length} />}
+      {selectedPhoto && <Lightbox photo={selectedPhoto} onShare={sharePhoto} onClose={closeLightbox} onNext={() => { if (selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1) setSelectedPhotoId(displayPhotos[selectedIndex + 1].id); }} onPrev={() => { if (selectedIndex > 0) setSelectedPhotoId(displayPhotos[selectedIndex - 1].id); }} hasNext={selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1} hasPrev={selectedIndex > 0} position={selectedIndex >= 0 ? selectedIndex + 1 : undefined} total={displayPhotos.length} />}
     </main>
   );
 };

@@ -15,6 +15,7 @@ class AiGatewayError extends Error {
 }
 
 class AiTagValidationError extends Error {}
+class AiMetadataValidationError extends Error {}
 
 async function config(): Promise<{ baseUrl: string; model: string; apiKey?: string }> {
   const row = await dbGet<{ value: string }>("SELECT value FROM settings WHERE key = 'ai_config'");
@@ -41,6 +42,28 @@ export function parseTags(content: string, available: string[]) {
   return result;
 }
 
+export function parsePhotoMetadata(content: string, available: string[]) {
+  const match = content.match(/\{[\s\S]*\}/);
+  if (!match) throw new AiMetadataValidationError('AI 未返回可用的照片信息 JSON');
+  let parsed: { title?: unknown; tags?: unknown };
+  try {
+    parsed = JSON.parse(match[0]) as { title?: unknown; tags?: unknown };
+  } catch {
+    throw new AiMetadataValidationError('AI 返回的照片信息 JSON 无效');
+  }
+  const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+  if (!title || !/\p{Script=Han}/u.test(title) || [...title].length > 15 || /[\n\r《》「」『』“”"']/.test(title)) {
+    throw new AiMetadataValidationError('AI 生成的标题不符合中文、15 字以内且不含引号的要求');
+  }
+  let tags: string[];
+  try {
+    tags = parseTags(JSON.stringify({ tags: parsed.tags }), available);
+  } catch (error) {
+    throw new AiMetadataValidationError(error instanceof Error ? error.message : 'AI 标签无效');
+  }
+  return { title, tags };
+}
+
 async function requestTags(image: Buffer, settings: { baseUrl: string; model: string; apiKey?: string }, tags: string[]) {
   const requiredExisting = Math.min(2, tags.length);
   const reuseRule = requiredExisting === 0
@@ -63,6 +86,26 @@ async function requestTags(image: Buffer, settings: { baseUrl: string; model: st
   return String(result?.choices?.[0]?.message?.content || '');
 }
 
+async function requestMetadata(image: Buffer, settings: { baseUrl: string; model: string; apiKey?: string }, tags: string[]) {
+  const requiredExisting = Math.min(2, tags.length);
+  const reuseRule = requiredExisting === 0
+    ? '目前没有已有标签，请生成 3 个简洁、具体的中文标签。'
+    : `输出的 3 个标签中至少 ${requiredExisting} 个必须逐字从已有标签中选择；最多可新增 ${3 - requiredExisting} 个标签。`;
+  const prompt = `分析这张摄影作品，生成一个克制、自然、有文艺感的中文标题，标题不超过 15 个字符，不使用书名号、引号或换行。同时返回最贴切的 3 个中文标签。${reuseRule} 不要解释、不要使用 Markdown，只返回 JSON：{"title":"照片标题","tags":["标签一","标签二","标签三"]}。已有标签：${tags.join('、') || '（暂无）'}`;
+  let response: Response;
+  try {
+    response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+      body: JSON.stringify({ model: settings.model, thinking: { type: 'disabled' }, max_tokens: 256, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image.toString('base64')}`, detail: 'low' } }] }] }),
+    });
+  } catch (error) {
+    throw new AiGatewayError(`无法连接 AI 服务：${error instanceof Error ? error.message : '网络请求失败'}`);
+  }
+  const result = await response.json().catch(() => null) as any;
+  if (!response.ok) throw new AiGatewayError(`AI 服务返回 ${response.status}：${result?.error?.message || result?.message || '请求失败'}`, response.status);
+  return String(result?.choices?.[0]?.message?.content || '');
+}
+
 async function generateTags(file: Pick<Express.Multer.File, 'buffer' | 'mimetype' | 'originalname'>) {
   const settings = await config();
   if (!settings.apiKey) throw new AiGatewayError('请先在 API 设置中保存 API Key', 400);
@@ -73,6 +116,22 @@ async function generateTags(file: Pick<Express.Multer.File, 'buffer' | 'mimetype
     try { return parseTags(await requestTags(image, settings, tags), tags); }
     catch (error) {
       if (!(error instanceof AiTagValidationError)) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+async function generateMetadata(file: Pick<Express.Multer.File, 'buffer' | 'mimetype' | 'originalname'>) {
+  const settings = await config();
+  if (!settings.apiKey) throw new AiGatewayError('请先在 API 设置中保存 API Key', 400);
+  const image = await prepareImageForVision(file);
+  const tags = await new TagDao().getAllTagNames();
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try { return parsePhotoMetadata(await requestMetadata(image, settings, tags), tags); }
+    catch (error) {
+      if (!(error instanceof AiMetadataValidationError)) throw error;
       lastError = error;
     }
   }
@@ -123,6 +182,39 @@ router.post('/tags/photo', requireAdmin, async (request, response) => {
     const message = error instanceof Error ? error.message : 'AI 自动打标签失败';
     console.error('AI 自动打标签失败:', error);
     const status = error instanceof AiTagValidationError
+      ? 422
+      : error instanceof AiGatewayError && error.status >= 400 && error.status < 500
+        ? error.status
+        : 502;
+    response.status(status).json({ success: false, error: message });
+  }
+});
+
+router.post('/metadata', requireAdmin, upload.single('file'), async (request, response) => {
+  try {
+    if (!request.file) return response.status(400).json({ success: false, error: '请选择一张图片' });
+    return response.json({ success: true, data: await generateMetadata(request.file) });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : 'AI 照片信息生成失败';
+    console.error('AI 照片信息生成失败:', error);
+    const status = error instanceof AiMetadataValidationError
+      ? 422
+      : error instanceof AiGatewayError && error.status >= 400 && error.status < 500
+        ? error.status
+        : 502;
+    response.status(status).json({ success: false, error: message });
+  }
+});
+
+router.post('/metadata/photo', requireAdmin, async (request, response) => {
+  try {
+    const photoId = typeof request.body?.photoId === 'string' ? request.body.photoId.trim() : '';
+    if (!photoId) return response.status(400).json({ success: false, error: '照片 ID 无效' });
+    return response.json({ success: true, data: await generateMetadata(await getStoredPhotoFile(photoId)) });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : 'AI 照片信息生成失败';
+    console.error('AI 照片信息生成失败:', error);
+    const status = error instanceof AiMetadataValidationError
       ? 422
       : error instanceof AiGatewayError && error.status >= 400 && error.status < 500
         ? error.status

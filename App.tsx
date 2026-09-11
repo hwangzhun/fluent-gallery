@@ -24,7 +24,28 @@ function PublicGalleryPage() {
   const [gallerySettings, setGallerySettings] = useState<GallerySettings>({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' });
   const [configuredHero, setConfiguredHero] = useState<Photo | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [sharedPhoto, setSharedPhoto] = useState<Photo | null>(null);
+  const [sharedPhotoError, setSharedPhotoError] = useState<string | null>(null);
   const requestVersion = useRef(0);
+  const sharedPhotoId = new URLSearchParams(location.search).get('photo')?.trim() || null;
+
+  useEffect(() => {
+    let active = true;
+    if (!sharedPhotoId) {
+      setSharedPhoto(null);
+      return () => { active = false; };
+    }
+    setSharedPhoto(null);
+    setSharedPhotoError(null);
+    photoService.getPhotoById(sharedPhotoId)
+      .then(photo => { if (active) setSharedPhoto(photo); })
+      .catch(() => {
+        if (!active) return;
+        setSharedPhotoError('这幅作品已不可用，已为你返回画廊。');
+        navigate('/', { replace: true });
+      });
+    return () => { active = false; };
+  }, [sharedPhotoId, navigate]);
 
   useEffect(() => {
     let active = true;
@@ -110,7 +131,7 @@ function PublicGalleryPage() {
     navigate('/', { replace: true, state: null });
   }, [location.state, loading, settingsLoading, navigate]);
 
-  return <div className="gallery-shell"><Navbar /><MasonryGallery photos={photos} totalPhotos={totalPhotos} hasMore={hasMore} loadingMore={loadingMore} configuredHero={configuredHero} loading={loading || settingsLoading} error={error} filter={filter} gallerySettings={gallerySettings} onLoadMore={loadMore} onFilterChange={next => setFilter(current => ({ ...current, ...next }))} onRetry={() => setRetryVersion(value => value + 1)} /></div>;
+  return <div className="gallery-shell"><Navbar /><MasonryGallery photos={photos} totalPhotos={totalPhotos} hasMore={hasMore} loadingMore={loadingMore} configuredHero={configuredHero} sharedPhoto={sharedPhoto} sharedPhotoError={sharedPhotoError} loading={loading || settingsLoading} error={error} filter={filter} gallerySettings={gallerySettings} onLoadMore={loadMore} onFilterChange={next => setFilter(current => ({ ...current, ...next }))} onRetry={() => setRetryVersion(value => value + 1)} onDismissSharedPhotoError={() => setSharedPhotoError(null)} onLightboxClose={() => { if (sharedPhotoId) navigate('/', { replace: true }); }} /></div>;
 }
 
 export default function App() {

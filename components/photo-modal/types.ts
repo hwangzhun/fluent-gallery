@@ -62,8 +62,8 @@ export interface PhotoUploadItem {
   uploadStatus: BatchUploadStatus;
   error?: string;
   uploadedPhoto?: Photo;
-  tagStatus?: 'loading' | 'ready' | 'failed';
-  tagError?: string;
+  analysisStatus?: 'loading' | 'ready' | 'failed';
+  analysisError?: string;
 }
 
 export interface BatchUploadResult {

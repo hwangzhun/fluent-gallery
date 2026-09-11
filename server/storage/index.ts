@@ -1,22 +1,24 @@
 /**
  * 存储服务统一接口
  */
-import { deleteOSSFile, extractPathFromOSSUrl } from './oss';
-import { storageConfig } from './config';
+import { deleteOSSFile, extractPathFromOSSUrl, normalizePublicUrl } from './oss';
+import { loadStorageConfig } from './config';
 import { unlinkSync, existsSync } from 'fs';
 import { isAbsolute, join } from 'path';
 
 /**
  * 判断 URL 是否为 OSS URL
  */
-function isOSSUrl(url: string): boolean {
+function isOSSUrl(url: string, publicUrl?: string): boolean {
   try {
     const urlObj = new URL(url);
+    const configuredHost = publicUrl ? new URL(normalizePublicUrl(publicUrl)).host : '';
     // 检查是否是 OSS 域名（常见格式）
     return urlObj.hostname.includes('oss-') || 
            urlObj.hostname.includes('aliyuncs.com') ||
            urlObj.hostname.includes('amazonaws.com') ||
-           urlObj.hostname.includes('qcloud.com');
+           urlObj.hostname.includes('qcloud.com') ||
+           Boolean(configuredHost && urlObj.host === configuredHost);
   } catch {
     return false;
   }
@@ -25,13 +27,18 @@ function isOSSUrl(url: string): boolean {
 /**
  * 删除文件（自动判断存储方式）
  */
-export async function deleteFile(url: string): Promise<void> {
+export async function deleteFile(url: string, objectKey?: string | null): Promise<void> {
   if (!url) {
     return;
   }
 
-  // 判断是否为 OSS URL
-  if (isOSSUrl(url)) {
+  const currentConfig = await loadStorageConfig();
+  if (currentConfig.mode === 'oss' && objectKey) {
+    await deleteOSSFile(objectKey.replace(/^\/+/, ''));
+    return;
+  }
+  // 判断是否为 OSS URL（包括已配置的自定义访问域名）
+  if (isOSSUrl(url, currentConfig.oss?.publicUrl)) {
     // OSS 文件删除
     const path = extractPathFromOSSUrl(url);
     if (path) {
@@ -41,7 +48,7 @@ export async function deleteFile(url: string): Promise<void> {
     }
   } else {
     // 本地文件删除
-    if (storageConfig.mode === 'local' && storageConfig.local) {
+    if (currentConfig.mode === 'local' && currentConfig.local) {
       // 从 URL 提取文件路径
       let filePath = url;
       
@@ -61,7 +68,7 @@ export async function deleteFile(url: string): Promise<void> {
       }
       
       // 构建完整路径
-      const uploadRoot = isAbsolute(storageConfig.local.uploadDir) ? storageConfig.local.uploadDir : join(process.cwd(), storageConfig.local.uploadDir.replace('./', ''));
+      const uploadRoot = isAbsolute(currentConfig.local.uploadDir) ? currentConfig.local.uploadDir : join(process.cwd(), currentConfig.local.uploadDir.replace('./', ''));
       const fullPath = join(uploadRoot, filePath);
       
       // 检查文件是否存在并删除

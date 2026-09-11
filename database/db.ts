@@ -4,6 +4,7 @@ import { Database } from 'sqlite3';
 import { readFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { deriveStorageKey } from './storageKey';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -106,6 +107,30 @@ async function addColumnToPhotos(columnName: string, columnDef: string): Promise
   });
 }
 
+async function ensurePhotoStorageKeys(): Promise<void> {
+  if (!await checkColumnExists('object_key')) {
+    console.log('📝 检测到需要迁移：添加 object_key 字段');
+    await addColumnToPhotos('object_key', 'TEXT');
+  }
+  if (!await checkColumnExists('thumbnail_object_key')) {
+    console.log('📝 检测到需要迁移：添加 thumbnail_object_key 字段');
+    await addColumnToPhotos('thumbnail_object_key', 'TEXT');
+  }
+
+  const rows = await dbAll<{ id: string; url: string; thumbnail_url: string; object_key: string | null; thumbnail_object_key: string | null }>(
+    `SELECT id, url, thumbnail_url, object_key, thumbnail_object_key
+     FROM photos
+     WHERE object_key IS NULL OR object_key = '' OR thumbnail_object_key IS NULL OR thumbnail_object_key = ''`,
+  );
+  for (const row of rows) {
+    await dbRun(
+      `UPDATE photos SET object_key = ?, thumbnail_object_key = ? WHERE id = ?`,
+      [row.object_key || deriveStorageKey(row.url), row.thumbnail_object_key || deriveStorageKey(row.thumbnail_url), row.id],
+    );
+  }
+  if (rows.length) console.log(`✅ 已回填 ${rows.length} 条照片 Object Key`);
+}
+
 /**
  * 初始化数据库（创建表结构）
  */
@@ -136,6 +161,7 @@ export async function initDatabase(): Promise<void> {
 
           await dbRun('CREATE INDEX IF NOT EXISTS idx_photos_likes_count ON photos(likes_count)');
           await dbRun('CREATE INDEX IF NOT EXISTS idx_photos_views_count ON photos(views_count)');
+          await ensurePhotoStorageKeys();
           
           // 确保 photo_likes 表存在
           const photoLikesExists = await new Promise<boolean>((resolve) => {
@@ -228,6 +254,7 @@ export async function initDatabase(): Promise<void> {
           if (hasPhotos) {
             if (!await checkColumnExists('likes_count')) await addColumnToPhotos('likes_count', 'INTEGER NOT NULL DEFAULT 0');
             if (!await checkColumnExists('views_count')) await addColumnToPhotos('views_count', 'INTEGER NOT NULL DEFAULT 0');
+            await ensurePhotoStorageKeys();
           }
         }
       }

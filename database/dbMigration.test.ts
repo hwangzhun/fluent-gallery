@@ -42,10 +42,18 @@ beforeAll(async () => {
 afterAll(async () => { await databaseModule.closeDatabase(); rmSync(directory, { recursive: true, force: true }); });
 
 describe('database interaction-count migration', () => {
-  it('adds cached counters and ranking indexes without losing legacy photos', async () => {
-    const photo = await databaseModule.dbGet<{ id: string; likes_count: number; views_count: number }>("SELECT id, likes_count, views_count FROM photos WHERE id = 'legacy-photo'");
+  it('adds counters and storage keys without losing legacy photos', async () => {
+    const photo = await databaseModule.dbGet<{ id: string; likes_count: number; views_count: number; object_key: string; thumbnail_object_key: string }>(
+      "SELECT id, likes_count, views_count, object_key, thumbnail_object_key FROM photos WHERE id = 'legacy-photo'",
+    );
     const indexes = await databaseModule.dbAll<{ name: string }>('PRAGMA index_list(photos)');
-    expect(photo).toEqual({ id: 'legacy-photo', likes_count: 0, views_count: 0 });
+    expect(photo).toEqual({
+      id: 'legacy-photo',
+      likes_count: 0,
+      views_count: 0,
+      object_key: 'legacy.webp',
+      thumbnail_object_key: 'legacy-thumb.webp',
+    });
     expect(indexes.map(index => index.name)).toEqual(expect.arrayContaining(['idx_photos_likes_count', 'idx_photos_views_count']));
   });
 });
@@ -58,4 +66,6 @@ it('adds album tables idempotently without altering existing photos or membershi
   expect(await databaseModule.dbGet("SELECT name FROM albums WHERE id = 'legacy-album'")).toEqual({ name: '迁移画册' });
   expect(await databaseModule.dbGet("SELECT photo_id FROM album_photos WHERE album_id = 'legacy-album'")).toEqual({ photo_id: 'legacy-photo' });
   expect(await databaseModule.dbGet("SELECT title FROM photos WHERE id = 'legacy-photo'")).toEqual({ title: 'Legacy' });
+  expect(await databaseModule.dbGet("SELECT object_key, thumbnail_object_key FROM photos WHERE id = 'legacy-photo'"))
+    .toEqual({ object_key: 'legacy.webp', thumbnail_object_key: 'legacy-thumb.webp' });
 });
