@@ -204,6 +204,20 @@ function deleteTencentObjects(client: COS, bucket: string, region: string, paths
 }
 
 /**
+ * Tencent CI stores image_process outputs with the bucket's default ACL. The
+ * gallery serves those objects with unsigned URLs, so both generated variants
+ * must explicitly be readable by visitors even when the bucket is private.
+ */
+async function publishTencentObjects(client: COS, bucket: string, region: string, paths: string[]) {
+  await Promise.all(paths.map(Key => client.putObjectAcl({
+    Bucket: bucket,
+    Region: region,
+    Key,
+    ACL: 'public-read',
+  })));
+}
+
+/**
  * Upload once and let Tencent CI create both AVIF variants. The display rule
  * overwrites the request object, so the original source is never retained.
  */
@@ -312,6 +326,7 @@ export async function putTencentProcessedObject(
     if (![width, height, displayBytes, thumbnailBytes].every(Number.isFinite) || width <= 0 || height <= 0 || displayBytes <= 0 || thumbnailBytes <= 0) {
       throw new Error('腾讯云返回的图片信息不完整');
     }
+    await publishTencentObjects(cosClient, config.bucket, config.region, paths);
     return {
       url: locationUrl(display.Location || data.Location || '', displayPath, publicUrl),
       thumbnailUrl: locationUrl(thumbnail.Location || '', thumbnailPath, publicUrl),

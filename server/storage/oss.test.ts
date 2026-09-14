@@ -102,6 +102,7 @@ describe('Tencent CI image processing', () => {
           { Key: thumbnailKey, Location: `default.example/${thumbnailKey}`, Format: 'AVIF', Width: '720', Height: '480', Size: '18000' },
         ] } } });
       }),
+      putObjectAcl: vi.fn(async () => ({})),
       deleteObject: vi.fn(),
     } as any;
 
@@ -117,6 +118,19 @@ describe('Tencent CI image processing', () => {
     });
     expect(params).not.toHaveProperty('CopySource');
     expect(JSON.parse(params.Headers['Pic-Operations']).rules).toHaveLength(2);
+    expect(client.putObjectAcl).toHaveBeenCalledTimes(2);
+    expect(client.putObjectAcl).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      Bucket: config.bucket,
+      Region: config.region,
+      Key: result.objectKey,
+      ACL: 'public-read',
+    }));
+    expect(client.putObjectAcl).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      Bucket: config.bucket,
+      Region: config.region,
+      Key: result.thumbnailObjectKey,
+      ACL: 'public-read',
+    }));
     expect(result).toMatchObject({
       url: expect.stringMatching(/^https:\/\/media\.hwangzhun\.com\/fluent_gallery\/photos\//),
       thumbnailUrl: expect.stringMatching(/^https:\/\/media\.hwangzhun\.com\/fluent_gallery\/thumbs\//),
