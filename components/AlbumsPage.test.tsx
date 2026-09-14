@@ -11,7 +11,7 @@ import type { Photo } from '../types';
 vi.mock('../api/albumService', () => ({ albumService: { list: vi.fn(), detail: vi.fn() } }));
 vi.mock('../api', () => ({ likeService: { isLiked: vi.fn().mockReturnValue(false), getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }), likePhoto: vi.fn() }, viewService: { getViewStatus: vi.fn().mockResolvedValue({ viewsCount: 0 }), recordView: vi.fn().mockResolvedValue({ viewsCount: 1 }) } }));
 const photo: Photo = { id: 'first', title: '第一张', url: '/first.jpg', thumbnailUrl: '/first-thumb.jpg', width: 800, height: 1200, year: 2026, tags: [], createdAt: '', likesCount: 0, viewsCount: 0 };
-const second = { ...photo, id: 'second', title: '第二张' };
+const second = { ...photo, id: 'second', title: '第二张', width: 1600, height: 900 };
 const album = { id: 'album', name: '旅行', description: '一段旅程', published: true, coverPhotoId: 'second', photoCount: 2, position: 0, previews: [second, photo] };
 function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname}:{location.state?.scrollTo}</output>; }
 beforeEach(() => {
@@ -26,7 +26,13 @@ describe('album browsing', () => {
   it('stacks actual previews, opens in member order, confines navigation and restores focus', async () => {
     const { container } = renderAlbums();
     const card = await screen.findByRole('button', { name: '打开画册：旅行，2 张照片' });
-    expect(container.querySelectorAll('.album-print')).toHaveLength(2);
+    const stack = container.querySelector<HTMLElement>('.album-stack');
+    const prints = container.querySelectorAll<HTMLElement>('.album-print');
+    expect(prints).toHaveLength(2);
+    expect(stack?.style.aspectRatio).toBe('1600 / 900');
+    expect(prints[0].style.aspectRatio).toBe('1600 / 900');
+    expect(prints[1].style.aspectRatio).toBe('800 / 1200');
+    expect(Number.parseFloat(prints[1].style.width)).toBeCloseTo(37.5);
     fireEvent.click(card);
     const dialog = await screen.findByRole('dialog', { name: '作品：第一张' });
     expect(screen.getByRole('button', { name: '上一幅作品' })).toBeDisabled();

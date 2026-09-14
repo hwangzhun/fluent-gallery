@@ -90,6 +90,9 @@ interface PhotoBasicFieldsProps {
   titleGenerating?: boolean;
   titleGenerationDisabled?: boolean;
   expandTags?: boolean;
+  sharedTags?: ReadonlySet<string>;
+  onToggleTagShared?: (tag: string) => void;
+  onRemoveTag?: (tag: string) => void;
 }
 
 export function PhotoBasicFields({
@@ -103,6 +106,9 @@ export function PhotoBasicFields({
   titleGenerating = false,
   titleGenerationDisabled = false,
   expandTags = false,
+  sharedTags,
+  onToggleTagShared,
+  onRemoveTag,
 }: PhotoBasicFieldsProps) {
   const toggleProps = { sharedFields, onToggleShared, disabled };
 
@@ -159,9 +165,11 @@ export function PhotoBasicFields({
         onChange={(value) => onChange('tags', value)}
         placeholder="输入标签或从列表选择..."
         disabled={disabled}
-        labelAction={<SharedFieldToggle field="tags" label="标签" {...toggleProps} />}
         resetKey={editorKey}
         expandAvailableHeight={expandTags}
+        sharedTags={sharedTags}
+        onToggleTagShared={onToggleTagShared}
+        onRemoveTag={onRemoveTag}
       />
     </div>
   );

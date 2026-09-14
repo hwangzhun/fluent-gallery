@@ -7,6 +7,18 @@ import { albumService, type Album, type AlbumDetail } from '../api/albumService'
 import { GalleryFooter } from './GalleryFooter';
 import { analytics } from '../api/analyticsService';
 
+const photoRatio = (photo?: Album['previews'][number]) => photo?.width > 0 && photo?.height > 0
+  ? photo.width / photo.height
+  : 3 / 2;
+
+function albumPrintStyle(photo: Album['previews'][number], cover?: Album['previews'][number]): React.CSSProperties {
+  const ratio = photoRatio(photo);
+  const coverRatio = photoRatio(cover);
+  return ratio >= coverRatio
+    ? { width: '100%', height: `${(coverRatio / ratio) * 100}%`, aspectRatio: `${photo.width || 3} / ${photo.height || 2}` }
+    : { width: `${(ratio / coverRatio) * 100}%`, height: '100%', aspectRatio: `${photo.width || 3} / ${photo.height || 2}` };
+}
+
 export function AlbumsPage() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,9 +71,9 @@ export function AlbumsPage() {
     <div className="gallery-section-heading"><div><p className="gallery-eyebrow">PHOTO ALBUMS</p><h1>画册</h1></div><p className="gallery-count">{loading ? '正在整理画册…' : `${albums.length} 本画册`}</p></div>
     <p className="albums-intro">将流动的片刻编成篇章，循着时间慢慢看。</p>
     {error && <div className="gallery-empty" role="alert"><p>{error}</p><button onClick={() => { analytics.contentRetry('albums'); setVersion(value => value + 1); }}><RotateCcw size={14} />重新加载</button></div>}
-    {loading ? <div className="albums-grid gallery-skeleton" role="status" aria-label="正在加载画册">{[0, 1, 2].map(i => <div key={i} className="gallery-skeleton-item" />)}</div> : !albums.length && !error ? <div className="gallery-empty"><h2>新的一册，静待展开。</h2><p>画册发布后将在这里呈现。</p></div> : <div className="albums-grid" aria-busy={Boolean(opening)}>
+    {loading ? <div className="albums-grid gallery-skeleton" role="status" aria-label="正在加载画册">{[0, 1, 2, 3].map(i => <div key={i} className="gallery-skeleton-item" />)}</div> : !albums.length && !error ? <div className="gallery-empty"><h2>新的一册，静待展开。</h2><p>画册发布后将在这里呈现。</p></div> : <div className="albums-grid" aria-busy={Boolean(opening)}>
       {albums.map(album => <button key={album.id} className="album-card" onClick={event => void open(album, event.currentTarget)} aria-label={`打开画册：${album.name}，${album.photoCount} 张照片`} disabled={Boolean(opening)}>
-        <span className="album-stack" aria-hidden="true">{album.previews.map((photo, i) => <span key={photo.id} className={`album-print album-print-${i}`}><PhotoImage photo={photo} /></span>)}</span>
+        <span className="album-stack" aria-hidden="true" style={{ aspectRatio: `${album.previews[0]?.width || 3} / ${album.previews[0]?.height || 2}` }}>{album.previews.map((photo, i) => <span key={photo.id} className={`album-print album-print-${i}`} style={albumPrintStyle(photo, album.previews[0])}><PhotoImage photo={photo} /></span>)}</span>
         <span className="album-card-heading"><span>{album.name}</span><ArrowUpRight size={18} /></span>
         {album.description && <span className="album-description">{album.description}</span>}
         <span className="album-count">{opening === album.id ? '正在打开…' : `${album.photoCount} 张照片`}</span>

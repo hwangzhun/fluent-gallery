@@ -342,31 +342,38 @@ body:has(.gallery-shell) { min-width: 0; }
 .albums-page { padding-top: 64px; padding-bottom: 100px; min-height: 75vh; }
 .albums-page h1 { font-family: "Noto Serif CJK SC", "Songti SC", SimSun, Georgia, serif; font-size: 36px; font-weight: 400; }
 .albums-intro { color: #777970; margin: 16px 0 54px; line-height: 1.8; }
-.albums-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 58px 48px; }
+.albums-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 52px 36px; }
 .album-card { min-width: 0; text-align: left; display: flex; flex-direction: column; color: #30332e; padding: 12px; }
 .album-card:focus-visible { outline: 2px solid #a25f43; outline-offset: 6px; }
-.album-stack { position: relative; display: block; width: calc(100% - 24px); aspect-ratio: 4 / 3; margin: 12px 12px 30px; }
-.album-print { position: absolute; inset: 0; display: block; padding: 10px; background: #fffefb; border: 1px solid #dcdcd1; box-shadow: 0 4px 12px #30332e0e; transition: transform var(--motion-large) var(--ease-out-quart); }
+.album-stack { position: relative; display: block; width: calc(100% - 24px); margin: 12px 12px 30px; }
+.album-print { position: absolute; top: 50%; left: 50%; display: block; padding: 10px; background: #fffefb; border: 1px solid #dcdcd1; box-shadow: 0 4px 12px #30332e0e; transition: transform var(--motion-large) var(--ease-out-quart); }
 .album-print .photo-image, .album-print img { width: 100%; height: 100%; object-fit: contain; }
-.album-print-0 { z-index: 3; transform: rotate(-2deg); }
-.album-print-1 { z-index: 2; transform: translate(7px, -5px) rotate(4deg); }
-.album-print-2 { z-index: 1; transform: translate(-6px, -7px) rotate(-6deg); }
-.album-card:focus-visible .album-print-0 { transform: translateY(-4px) rotate(0); }
+.album-print-0 { z-index: 3; transform: translate(-50%, -50%) rotate(-2deg); }
+.album-print-1 { z-index: 2; transform: translate(calc(-50% + 7px), calc(-50% - 5px)) rotate(4deg); }
+.album-print-2 { z-index: 1; transform: translate(calc(-50% - 6px), calc(-50% - 7px)) rotate(-6deg); }
+.album-card:focus-visible .album-print-0 { transform: translate(-50%, calc(-50% - 4px)) rotate(0); }
 .album-card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; font-family: "Noto Serif CJK SC", "Songti SC", SimSun, Georgia, serif; font-size: 20px; overflow-wrap: anywhere; }
 .album-card-heading svg { flex-shrink: 0; }
 .album-description { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: #777970; font-size: 14px; line-height: 1.8; margin-top: 10px; }
 .album-count { color: #777970; font-size: 12px; margin-top: 14px; }
 .gallery-nav nav a[aria-current="page"] { color: #30332e; }
 .lightbox-brand { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 1000px) { .albums-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) {
-  .albums-grid { grid-template-columns: minmax(0, 1fr); gap: 38px; }
+@media (max-width: 1100px) { .albums-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 46px 28px; } }
+@media (max-width: 700px) {
+  .albums-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 38px 16px; }
+  .album-card { padding: 6px; }
+  .album-stack { width: calc(100% - 12px); margin: 8px 6px 22px; }
+  .album-print { padding: 7px; }
+  .album-card-heading { gap: 7px; font-size: 16px; }
+  .album-card-heading svg { width: 16px; height: 16px; }
+  .album-description { margin-top: 8px; font-size: 13px; line-height: 1.65; -webkit-line-clamp: 2; }
+  .album-count { margin-top: 10px; }
   .albums-page { padding-top: 36px; }
   .gallery-nav { flex-wrap: wrap; height: auto; row-gap: 18px; padding-top: 22px; padding-bottom: 22px; }
   .gallery-nav nav { width: 100%; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 }
-@media (hover: hover) and (pointer: fine) { .album-card:hover .album-print-0 { transform: translateY(-4px) rotate(0); } }
-@media (prefers-reduced-motion: reduce) { .album-card:hover .album-print-0, .album-card:focus-visible .album-print-0 { transform: rotate(-2deg); } }
+@media (hover: hover) and (pointer: fine) { .album-card:hover .album-print-0 { transform: translate(-50%, calc(-50% - 4px)) rotate(0); } }
+@media (prefers-reduced-motion: reduce) { .album-card:hover .album-print-0, .album-card:focus-visible .album-print-0 { transform: translate(-50%, -50%) rotate(-2deg); } }
 .album-print > .artwork-image { display: block; width: 100%; height: 100%; }
 .album-print > .artwork-image img { object-fit: contain; }
 

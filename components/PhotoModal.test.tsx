@@ -126,6 +126,51 @@ describe('PhotoModal batch upload', () => {
     expect(screen.getByLabelText('将标题设为公共字段')).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('shares individual tags while keeping photo-specific tags independent', async () => {
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('first.jpg'), file('second.jpg')] } });
+
+    const tagInput = await screen.findByLabelText('标签');
+    expect(screen.queryByLabelText('将标签设为公共字段')).not.toBeInTheDocument();
+    fireEvent.change(tagInput, { target: { value: '旅行' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+
+    const sharedSwitch = await screen.findByLabelText('将标签“旅行”设为公共标签');
+    expect(sharedSwitch).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(sharedSwitch);
+    expect(sharedSwitch).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 2 张：second' }));
+    expect(screen.getByLabelText('删除标签“旅行”')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('标签'), { target: { value: '夜景' } });
+    fireEvent.keyDown(screen.getByLabelText('标签'), { key: 'Enter' });
+    expect(await screen.findByLabelText('删除标签“夜景”')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 1 张：first' }));
+    expect(screen.getByLabelText('删除标签“旅行”')).toBeInTheDocument();
+    expect(screen.queryByLabelText('删除标签“夜景”')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('继续添加照片'), { target: { files: [file('third.jpg')] } });
+    await waitFor(() => expect(screen.getByLabelText('照片数量：3')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 3 张：third' }));
+    expect(screen.getByLabelText('删除标签“旅行”')).toBeInTheDocument();
+    expect(screen.queryByLabelText('删除标签“夜景”')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('将标签“旅行”设为公共标签'));
+    expect(screen.getByLabelText('将标签“旅行”设为公共标签')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByLabelText('删除标签“旅行”'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 1 张：first' }));
+    expect(screen.getByLabelText('删除标签“旅行”')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('将标签“旅行”设为公共标签'));
+    fireEvent.click(screen.getByLabelText('删除标签“旅行”'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 2 张：second' }));
+    expect(screen.queryByLabelText('删除标签“旅行”')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('删除标签“夜景”')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 3 张：third' }));
+    expect(screen.queryByLabelText('删除标签“旅行”')).not.toBeInTheDocument();
+  });
+
   it('caps a batch at 50 photos instead of starting unbounded EXIF work', async () => {
     render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} />);
     const files = Array.from({ length: 51 }, (_, index) => file(`photo-${index}.jpg`, index + 1));
@@ -150,6 +195,7 @@ describe('PhotoModal batch upload', () => {
     expect(screen.getByText('日常')).toBeInTheDocument();
     expect(screen.getByText('光影')).toBeInTheDocument();
     expect(screen.getByText('街头')).toBeInTheDocument();
+    expect(screen.getAllByRole('switch', { name: /设为公共标签/ }).every(control => control.getAttribute('aria-checked') === 'false')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '编辑第 2 张：风经过街角' }));
     expect(screen.getByLabelText('标题')).toHaveValue('风经过街角');
     expect(aiService.suggestMetadata).toHaveBeenCalledTimes(2);

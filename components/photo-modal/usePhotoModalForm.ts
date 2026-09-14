@@ -61,6 +61,14 @@ function formDataFromPhoto(photo: Photo): PhotoFormData {
   };
 }
 
+function parseTags(value: string): string[] {
+  return [...new Set(value.split(',').map(tag => tag.trim()).filter(Boolean))];
+}
+
+function serializeTags(tags: Iterable<string>): string {
+  return [...new Set(tags)].join(', ');
+}
+
 export function usePhotoModalForm({
   isOpen,
   mode,
@@ -74,6 +82,7 @@ export function usePhotoModalForm({
   const [items, setItems] = useState<PhotoUploadItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sharedFields, setSharedFields] = useState<Set<BatchFieldKey>>(() => new Set());
+  const [sharedTags, setSharedTags] = useState<Set<string>>(() => new Set());
   const [phase, setPhase] = useState<BatchUploadPhase>('editing');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,7 +204,7 @@ export function usePhotoModalForm({
         data: {
           title: getPhotoTitle(file),
           year: new Date().getFullYear(),
-          tags: '',
+          tags: serializeTags(sharedTags),
           exif: {},
         },
         exifStatus: 'loading',
@@ -237,6 +246,7 @@ export function usePhotoModalForm({
     previewUrls.current.delete(removed.previewUrl);
     const remaining = items.filter(item => item.id !== itemId);
     setItems(remaining);
+    if (remaining.length === 0) setSharedTags(new Set());
     if (activeId === itemId) {
       setActiveId(remaining[index]?.id || remaining[index - 1]?.id || null);
     }
@@ -252,22 +262,23 @@ export function usePhotoModalForm({
     }
     if (phase !== 'editing' || !activeItem) return;
 
+    const isSharedField = field !== 'tags' && sharedFields.has(field);
     for (const item of items) {
-      if (item.id === activeItem.id || sharedFields.has(field)) {
+      if (item.id === activeItem.id || isSharedField) {
         const touched = editedFields.current.get(item.id) || new Set<BatchFieldKey>();
         touched.add(field);
         editedFields.current.set(item.id, touched);
       }
     }
     setItems(current => current.map(item => (
-      item.id === activeItem.id || sharedFields.has(field)
+      item.id === activeItem.id || isSharedField
         ? { ...item, data: updatePhotoFormField(item.data, field, value) }
         : item
     )));
   };
 
   const toggleSharedField = (field: BatchFieldKey) => {
-    if (phase !== 'editing') return;
+    if (phase !== 'editing' || field === 'tags') return;
     setSharedFields(current => {
       const next = new Set(current);
       if (next.has(field)) next.delete(field);
@@ -276,12 +287,55 @@ export function usePhotoModalForm({
     });
   };
 
+  const toggleSharedTag = (tag: string) => {
+    if (phase !== 'editing' || !tag) return;
+    setError(null);
+    if (sharedTags.has(tag)) {
+      setSharedTags(current => {
+        const next = new Set(current);
+        next.delete(tag);
+        return next;
+      });
+      return;
+    }
+
+    setSharedTags(current => new Set(current).add(tag));
+    setItems(current => current.map(item => ({
+      ...item,
+      data: { ...item.data, tags: serializeTags([...parseTags(item.data.tags), tag]) },
+    })));
+  };
+
+  const removeTag = (tag: string) => {
+    if (phase !== 'editing' || !activeItem) return;
+    setError(null);
+    const removeFrom = (value: string) => serializeTags(parseTags(value).filter(valueTag => valueTag !== tag));
+
+    if (sharedTags.has(tag)) {
+      setSharedTags(current => {
+        const next = new Set(current);
+        next.delete(tag);
+        return next;
+      });
+      setItems(current => current.map(item => ({
+        ...item,
+        data: { ...item.data, tags: removeFrom(item.data.tags) },
+      })));
+      return;
+    }
+
+    setItems(current => current.map(item => item.id === activeItem.id
+      ? { ...item, data: { ...item.data, tags: removeFrom(item.data.tags) } }
+      : item));
+  };
+
   const resetBatch = () => {
     previewUrls.current.forEach(url => URL.revokeObjectURL(url));
     previewUrls.current.clear();
     setItems([]);
     setActiveId(null);
     setSharedFields(new Set());
+    setSharedTags(new Set());
     editedFields.current.clear();
     setPhase('editing');
     setSelectionNotice('');
@@ -489,9 +543,12 @@ export function usePhotoModalForm({
     selectionNotice,
     setActiveId,
     sharedFields,
+    sharedTags,
     successCount,
     processingCount,
     toggleSharedField,
+    toggleSharedTag,
+    removeTag,
     updateField,
   };
 }

@@ -174,18 +174,21 @@ interface BatchWorkspaceProps {
   phase: BatchUploadPhase;
   completedCount: number;
   sharedFields: Set<BatchFieldKey>;
+  sharedTags: ReadonlySet<string>;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onFileSelect: (event: ChangeEvent<HTMLInputElement>) => void;
   onChange: (field: BatchFieldKey, value: string | number | string[]) => void;
   onToggleShared: (field: BatchFieldKey) => void;
+  onToggleTagShared: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
   onRegenerateTitle: () => void;
   titleGenerating: boolean;
   titleGenerationDisabled: boolean;
   expandTags?: boolean;
 }
 
-export function BatchWorkspace({ items, activeItem, phase, completedCount, sharedFields, onSelect, onRemove, onFileSelect, onChange, onToggleShared, onRegenerateTitle, titleGenerating, titleGenerationDisabled, expandTags = false }: BatchWorkspaceProps) {
+export function BatchWorkspace({ items, activeItem, phase, completedCount, sharedFields, sharedTags, onSelect, onRemove, onFileSelect, onChange, onToggleShared, onToggleTagShared, onRemoveTag, onRegenerateTitle, titleGenerating, titleGenerationDisabled, expandTags = false }: BatchWorkspaceProps) {
   const [panel, setPanel] = useState<'basic' | 'details'>('basic');
   const disabled = phase !== 'editing';
   const activeIndex = items.findIndex(item => item.id === activeItem.id);
@@ -222,7 +225,7 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
           <div className="photo-modal-scroll flex-none overflow-visible px-4 py-4 sm:px-5 md:min-h-0 md:flex-1 md:overflow-y-auto">
             {panel === 'basic' ? (
               <>
-                <PhotoBasicFields data={activeItem.data} onChange={onChange} sharedFields={sharedFields} onToggleShared={onToggleShared} disabled={disabled} editorKey={activeItem.id} onRegenerateTitle={onRegenerateTitle} titleGenerating={titleGenerating} titleGenerationDisabled={titleGenerationDisabled} expandTags={expandTags} />
+                <PhotoBasicFields data={activeItem.data} onChange={onChange} sharedFields={sharedFields} onToggleShared={onToggleShared} sharedTags={sharedTags} onToggleTagShared={onToggleTagShared} onRemoveTag={onRemoveTag} disabled={disabled} editorKey={activeItem.id} onRegenerateTitle={onRegenerateTitle} titleGenerating={titleGenerating} titleGenerationDisabled={titleGenerationDisabled} expandTags={expandTags} />
                 {activeItem.titleError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 重新生成标题失败：{activeItem.titleError}</p>}
                 {activeItem.analysisError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 生成标题与标签失败：{activeItem.analysisError}</p>}
               </>

@@ -152,11 +152,14 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
                   phase={form.phase}
                   completedCount={form.completedCount}
                   sharedFields={form.sharedFields}
+                  sharedTags={form.sharedTags}
                   onSelect={form.setActiveId}
                   onRemove={form.removeItem}
                   onFileSelect={form.handleFileSelect}
                   onChange={form.updateField}
                   onToggleShared={form.toggleSharedField}
+                  onToggleTagShared={form.toggleSharedTag}
+                  onRemoveTag={form.removeTag}
                   onRegenerateTitle={() => void form.regenerateTitle()}
                   titleGenerating={form.activeTitleGenerating}
                   titleGenerationDisabled={form.analyzing || form.titleGenerating}

@@ -10,6 +10,9 @@ interface TagSelectorProps {
   labelAction?: React.ReactNode;
   resetKey?: string;
   expandAvailableHeight?: boolean;
+  sharedTags?: ReadonlySet<string>;
+  onToggleTagShared?: (tag: string) => void;
+  onRemoveTag?: (tag: string) => void;
 }
 
 export const TagSelector: React.FC<TagSelectorProps> = ({ 
@@ -20,6 +23,9 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
   labelAction,
   resetKey,
   expandAvailableHeight = false,
+  sharedTags,
+  onToggleTagShared,
+  onRemoveTag,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -95,6 +101,10 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
   // 删除标签
   const removeTag = (tagToRemove: string) => {
     if (disabled) return;
+    if (onRemoveTag) {
+      onRemoveTag(tagToRemove);
+      return;
+    }
     const newTags = currentTags.filter(tag => tag !== tagToRemove);
     onChange(newTags.join(', '));
   };
@@ -191,14 +201,31 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
           {currentTags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-sm"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-sm"
             >
               <Tag size={12} />
-              {tag}
+              <span>{tag}</span>
+              {sharedTags && onToggleTagShared && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={sharedTags.has(tag)}
+                  aria-label={`将标签“${tag}”设为公共标签`}
+                  onClick={() => onToggleTagShared(tag)}
+                  disabled={disabled}
+                  className="inline-flex items-center gap-1 text-[11px] font-normal text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span>公共</span>
+                  <span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${sharedTags.has(tag) ? 'bg-blue-600' : 'bg-gray-200'}`}>
+                    <span className={`absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${sharedTags.has(tag) ? 'translate-x-3' : ''}`} />
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => removeTag(tag)}
                 disabled={disabled}
+                aria-label={`删除标签“${tag}”`}
                 className="hover:text-blue-900 transition-colors"
               >
                 <X size={14} />
