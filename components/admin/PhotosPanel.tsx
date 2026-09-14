@@ -6,9 +6,10 @@ import { PhotoImage } from '../PhotoImage';
 import { Photo } from '../../types';
 import { photoService, type AdminPhotoSort, type BulkPhotoChanges } from '../../api/photoService';
 import { tagService } from '../../api/tagService';
-import { forgetPendingUploadJobs, photoUploadService } from '../../api/photoUploadService';
+import { forgetPendingUploadJobs, parsePhotoTags, photoUploadService } from '../../api/photoUploadService';
 import { PhotoModal, type BatchUploadResult, type PhotoFormData, type PhotoUploadData } from '../PhotoModal';
 import { SelectMenu } from '../SelectMenu';
+import { TagSelector } from '../TagSelector';
 
 type Mode = 'list' | 'grid';
 type PageSize = 30 | 60 | 120;
@@ -41,10 +42,108 @@ function ConfirmDialog({ title, description, onCancel, onConfirm }: { title: str
 }
 
 function BulkEditDialog({ count, onCancel, onSave, onDelete }: { count: number; onCancel: () => void; onSave: (changes: BulkPhotoChanges) => Promise<void>; onDelete: () => void }) {
-  const [yearEnabled, setYearEnabled] = useState(false); const [year, setYear] = useState(String(new Date().getFullYear())); const [tagsEnabled, setTagsEnabled] = useState(false); const [tags, setTags] = useState(''); const [tagMode, setTagMode] = useState<'append' | 'remove' | 'replace'>('append'); const [exifEnabled, setExifEnabled] = useState<Record<string, boolean>>({}); const [exif, setExif] = useState<Record<string, string>>({}); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
-  const fields = [['camera', '相机型号'], ['lens', '镜头'], ['author', '作者'], ['city', '城市'], ['province', '省份'], ['country', '国家']] as const;
-  const submit = async () => { const next: BulkPhotoChanges = {}; if (yearEnabled) next.year = Number(year); if (tagsEnabled) next.tags = { mode: tagMode, values: tags.split(',').map(value => value.trim()).filter(Boolean) }; const selectedExif = Object.fromEntries(Object.entries(exif).filter(([key]) => exifEnabled[key])) as Record<string, string>; if (Object.keys(selectedExif).length) next.exif = selectedExif; if (!next.year && !next.tags && !next.exif) return setError('请勾选至少一个要修改的字段'); if (next.year && (!Number.isInteger(next.year) || next.year <= 0)) return setError('请填写有效年份'); setSaving(true); setError(''); try { await onSave(next); } catch (reason) { setError(reason instanceof Error ? reason.message : '批量更新失败'); } finally { setSaving(false); } };
-  return <div role="dialog" aria-modal="true" aria-labelledby="bulk-edit-title" className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/45 p-4"><div className="w-full max-w-xl rounded-2xl bg-white p-6"><h2 id="bulk-edit-title">批量修改 {count} 张照片</h2><p className="mt-2 text-sm text-slate-600">只有勾选的字段会写入；EXIF 会保留未勾选的信息。</p><div className="mt-5 space-y-4"><label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={yearEnabled} onChange={event => setYearEnabled(event.target.checked)} />年份<input disabled={!yearEnabled} value={year} onChange={event => setYear(event.target.value)} type="number" className="ml-auto w-32 rounded border px-2 py-1.5" /></label><div className="rounded-lg border p-3"><div className="flex items-center gap-3 text-sm"><label className="inline-flex items-center gap-3"><input type="checkbox" checked={tagsEnabled} onChange={event => setTagsEnabled(event.target.checked)} />标签操作</label><SelectMenu disabled={!tagsEnabled} value={tagMode} onChange={setTagMode} ariaLabel="标签操作" className="ml-auto w-28" options={[{ value: 'append', label: '追加' }, { value: 'remove', label: '移除' }, { value: 'replace', label: '替换' }]} /></div><input disabled={!tagsEnabled} value={tags} onChange={event => setTags(event.target.value)} placeholder="用逗号分隔标签" className="mt-3 w-full rounded border px-3 py-2 text-sm" /></div><div className="rounded-lg border p-3"><p className="text-sm font-medium">EXIF</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.map(([key, label]) => <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(exifEnabled[key])} onChange={event => setExifEnabled(current => ({ ...current, [key]: event.target.checked }))} />{label}<input disabled={!exifEnabled[key]} value={exif[key] || ''} onChange={event => setExif(current => ({ ...current, [key]: event.target.value }))} className="min-w-0 flex-1 rounded border px-2 py-1" /></label>)}</div></div></div>{error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-between gap-3"><button onClick={onDelete} disabled={saving} className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700">删除所选照片</button><div className="flex gap-3"><button onClick={onCancel} disabled={saving} className="rounded-xl border px-4 py-2 text-sm">取消</button><button onClick={() => void submit()} disabled={saving} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{saving ? '正在保存…' : '应用修改'}</button></div></div></div></div>;
+  const [yearEnabled, setYearEnabled] = useState(false);
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [tagsEnabled, setTagsEnabled] = useState(false);
+  const [tags, setTags] = useState('');
+  const [tagMode, setTagMode] = useState<'append' | 'remove' | 'replace'>('append');
+  const [exifEnabled, setExifEnabled] = useState<Record<string, boolean>>({});
+  const [exif, setExif] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const fields = [
+    ['camera', '相机型号', '例如: Canon EOS 5D Mark IV'],
+    ['lens', '镜头', '例如: EF 24-70mm f/2.8L'],
+    ['aperture', '光圈', '例如: f/2.8'],
+    ['shutterSpeed', '快门速度', '例如: 1/125s'],
+    ['iso', 'ISO', '例如: ISO 400'],
+    ['author', '作者', '例如: 张三'],
+    ['copyright', '版权', '例如: © 2026 版权所有'],
+    ['country', '国家', '例如: 中国'],
+    ['province', '省份', '例如: 广东省'],
+    ['city', '城市', '例如: 深圳'],
+  ] as const;
+
+  const submit = async () => {
+    const next: BulkPhotoChanges = {};
+    if (yearEnabled) next.year = Number(year);
+    if (tagsEnabled) next.tags = { mode: tagMode, values: parsePhotoTags(tags) };
+    const selectedExif = Object.fromEntries(
+      Object.entries(exifEnabled)
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => [key, exif[key] || '']),
+    );
+    if (Object.keys(selectedExif).length) next.exif = selectedExif;
+    if (next.year === undefined && !next.tags && !next.exif) return setError('请勾选至少一个要修改的字段');
+    if (next.year !== undefined && (!Number.isInteger(next.year) || next.year <= 0)) return setError('请填写有效年份');
+    if (next.tags && next.tags.mode !== 'replace' && next.tags.values.length === 0) return setError('请至少选择一个要追加或移除的标签');
+    setSaving(true);
+    setError('');
+    try { await onSave(next); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '批量更新失败'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="bulk-edit-title" className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/45 p-4">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="border-b border-slate-200 px-6 py-5">
+          <h2 id="bulk-edit-title">批量修改 {count} 张照片</h2>
+          <p className="mt-2 text-sm text-slate-600">只有启用的字段会写入；未启用的照片信息保持不变。</p>
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          <div className="rounded-xl border border-slate-200 p-4">
+            <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={yearEnabled} onChange={event => setYearEnabled(event.target.checked)} />
+              修改年份
+              <input aria-label="年份" disabled={!yearEnabled} value={year} onChange={event => setYear(event.target.value)} type="number" className="ml-auto w-32 rounded-lg border border-gray-200 px-3 py-2 font-normal disabled:bg-gray-100" />
+            </label>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="mb-4 flex items-center gap-3">
+              <label className="inline-flex items-center gap-3 text-sm font-medium text-slate-700">
+                <input type="checkbox" checked={tagsEnabled} onChange={event => setTagsEnabled(event.target.checked)} />
+                修改标签
+              </label>
+              <SelectMenu disabled={!tagsEnabled} value={tagMode} onChange={setTagMode} ariaLabel="标签操作" className="ml-auto w-28" options={[{ value: 'append', label: '追加' }, { value: 'remove', label: '移除' }, { value: 'replace', label: '替换' }]} />
+            </div>
+            <TagSelector value={tags} onChange={setTags} disabled={!tagsEnabled} placeholder="输入标签或从列表选择..." resetKey={tagMode} />
+            {tagsEnabled && tagMode === 'replace' && <p className="mt-2 text-xs text-slate-500">不选择任何标签时，将清空所选照片的全部标签。</p>}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-800">拍摄信息</h3>
+              <span className="text-xs text-slate-500">勾选字段后可修改，也可留空以清除原值</span>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {fields.map(([key, label, placeholder]) => {
+                const inputId = `bulk-exif-${key}`;
+                return (
+                  <div key={key}>
+                    <div className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input aria-label={`修改${label}`} type="checkbox" checked={Boolean(exifEnabled[key])} onChange={event => setExifEnabled(current => ({ ...current, [key]: event.target.checked }))} />
+                      <label htmlFor={inputId}>{label}</label>
+                    </div>
+                    <input id={inputId} aria-label={label} disabled={!exifEnabled[key]} value={exif[key] || ''} onChange={event => setExif(current => ({ ...current, [key]: event.target.value }))} placeholder={placeholder} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100" />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        </div>
+        <div className="flex flex-wrap justify-between gap-3 border-t border-slate-200 px-6 py-4">
+          <button onClick={onDelete} disabled={saving} className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700">删除所选照片</button>
+          <div className="flex gap-3">
+            <button onClick={onCancel} disabled={saving} className="rounded-xl border px-4 py-2 text-sm">取消</button>
+            <button onClick={() => void submit()} disabled={saving} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{saving ? '正在保存…' : '应用修改'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function PhotosPanel({ onSessionExpired, onOpenDesktopUpload, externalReloadVersion = 0 }: { onSessionExpired: () => void; onOpenDesktopUpload?: () => void; externalReloadVersion?: number }) {

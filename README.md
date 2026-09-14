@@ -61,7 +61,7 @@ docker compose up -d --build
 
 > Docker 默认只监听本机地址。如果要让画廊通过公网域名访问，请在它前面配置反向代理与 HTTPS。
 
-当前版本为 **1.0.6**。如果希望在本地开发或参与项目，需要 Node.js 20.6+；相关配置可参考 [`.env.example`](./.env.example)。
+当前版本为 **1.0.7**。如果希望在本地开发或参与项目，需要 Node.js 20.6+；相关配置可参考 [`.env.example`](./.env.example)。
 
 ## 第一次使用
 

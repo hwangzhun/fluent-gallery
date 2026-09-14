@@ -16,12 +16,14 @@ vi.mock('../../api/photoService', () => ({
   photoService: {
     getAdminPhotos: vi.fn().mockResolvedValue({ items: photos, total: 2, page: 1, pageSize: 30, totalPages: 1 }),
     updatePhoto: vi.fn(),
+    batchUpdate: vi.fn().mockResolvedValue(1),
     deletePhoto: vi.fn(),
   },
 }));
-vi.mock('../../api/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([]), getAllTagNames: vi.fn().mockResolvedValue([]) } }));
+vi.mock('../../api/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([]), getAllTagNames: vi.fn().mockResolvedValue(['旅行']), createTag: vi.fn() } }));
 vi.mock('../../api/photoUploadService', () => ({
   forgetPendingUploadJobs: vi.fn(),
+  parsePhotoTags: (value: string) => [...new Set(value.split(',').map(tag => tag.trim()).filter(Boolean))],
   photoUploadService: { uploadPhoto: vi.fn(), getJobStatuses: vi.fn() },
 }));
 vi.mock('../PhotoModal', () => ({
@@ -83,6 +85,33 @@ describe('PhotosPanel thumbnail sizing', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '选择 横幅' }));
     expect(trigger).toBeDisabled();
     expect(trigger).not.toHaveClass('is-visible');
+  });
+
+  it('uses the upload tag selector and submits every supported photo metadata field', async () => {
+    render(<PhotosPanel onSessionExpired={vi.fn()} />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 横幅' }));
+    fireEvent.click(screen.getByRole('button', { name: '批量修改（1）' }));
+
+    expect(screen.getByRole('dialog', { name: '批量修改 1 张照片' })).toBeInTheDocument();
+    expect(screen.getByLabelText('光圈')).toBeDisabled();
+    expect(screen.getByLabelText('快门速度')).toBeDisabled();
+    expect(screen.getByLabelText('ISO')).toBeDisabled();
+    expect(screen.getByLabelText('版权')).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '修改标签' }));
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: '旅行' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '修改光圈' }));
+    fireEvent.change(screen.getByLabelText('光圈'), { target: { value: 'f/2.8' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: '修改版权' }));
+    fireEvent.click(screen.getByRole('button', { name: '应用修改' }));
+
+    await act(async () => {});
+    expect(photoService.batchUpdate).toHaveBeenCalledWith(['one'], {
+      tags: { mode: 'append', values: ['旅行'] },
+      exif: { aperture: 'f/2.8', copyright: '' },
+    });
   });
 
   it('tracks queued uploads and refreshes after background processing completes', async () => {
