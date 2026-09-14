@@ -268,9 +268,9 @@ export async function putTencentProcessedImages(
 }
 
 /**
- * Tencent COS can process an existing object with a server-side copy. This
- * avoids downloading a browser-direct upload to the application server merely
- * to submit it back to COS for CI processing.
+ * Ask Tencent CI to process an object that already exists in COS. Cloud-side
+ * image processing uses POST ?image_process; putObjectCopy only returns a
+ * CopyObjectResult and therefore cannot expose CI's ProcessResults.
  */
 export async function putTencentProcessedObject(
   client: OSSClient,
@@ -289,22 +289,21 @@ export async function putTencentProcessedObject(
       { fileid: `/${thumbnailPath}`, rule: 'imageMogr2/auto-orient/thumbnail/720x720>/format/avif/quality/74!' },
     ],
   });
-  const encodedSource = sourcePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
   try {
-    const data: any = await new Promise((resolve, reject) => cosClient.putObjectCopy({
+    const data: any = await new Promise((resolve, reject) => cosClient.request({
       Bucket: config.bucket,
       Region: config.region,
-      Key: displayPath,
-      CopySource: `${config.bucket}.cos.${config.region}.myqcloud.com/${encodedSource}`,
-      ACL: 'public-read',
-      PicOperations: picOperations,
+      Key: sourcePath,
+      Method: 'POST',
+      Action: 'image_process',
+      Headers: { 'Pic-Operations': picOperations },
     } as any, (error: any, result: unknown) => error ? reject(error) : resolve(result)));
     const objects = processObjects(data);
     const byKey = (key: string) => objects.find(object => (object.Key || '').replace(/^\/+/, '') === key);
     const display = byKey(displayPath);
     const thumbnail = byKey(thumbnailPath);
     if (!display || !thumbnail || display.Format?.toLowerCase() !== 'avif' || thumbnail.Format?.toLowerCase() !== 'avif') {
-      throw new Error('腾讯云未返回完整的 AVIF 处理结果');
+      throw new Error('腾讯云 image_process 未返回完整的 AVIF 处理结果');
     }
     const width = Number(display.Width);
     const height = Number(display.Height);

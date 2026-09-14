@@ -92,6 +92,21 @@ describe('durable image jobs', () => {
     expect((await getImageJobStatuses(['expired-failure']))[0]?.status).toBe('failed');
   });
 
+  it('requeues jobs failed by the legacy Tencent copy response bug', async () => {
+    await stopImageJobWorker();
+    await dbRun(`INSERT INTO image_jobs (id, source_object_key, source_mime, metadata, status, attempts, error, completed_at)
+      VALUES ('legacy-tencent-failure', 'gallery/incoming/tencent.jpg', 'image/jpeg', ?, 'failed', 3,
+        '腾讯云未返回完整的 AVIF 处理结果', datetime('now'))`, [JSON.stringify(metadata)]);
+
+    await startImageJobWorker();
+
+    await waitFor(async () => (await dbGet<{ status: string }>(
+      "SELECT status FROM image_jobs WHERE id = 'legacy-tencent-failure'",
+    ))?.status === 'completed');
+    expect(await photos.getPhotoById('photo-legacy-tencent-failure')).toMatchObject({ url: '/display.avif' });
+    expect(mocks.deleteOSSFile).toHaveBeenCalledWith('gallery/incoming/tencent.jpg');
+  });
+
   it('finishes a restarted processing job without creating a duplicate photo', async () => {
     await stopImageJobWorker();
     const jobId = 'restart-job';

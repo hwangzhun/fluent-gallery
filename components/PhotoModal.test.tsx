@@ -252,6 +252,18 @@ describe('PhotoModal batch upload', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('keeps focus in a field while typing character by character', async () => {
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} onUpload={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('focus.jpg')] } });
+    const title = await screen.findByLabelText('标题');
+    title.focus();
+
+    fireEvent.change(title, { target: { value: '测' } });
+    expect(document.activeElement).toBe(title);
+    fireEvent.change(title, { target: { value: '测试' } });
+    expect(document.activeElement).toBe(title);
+  });
   it('shares album choices, keeps per-photo overrides, and carries retry placement', async () => {
     let failed = false;
     const onUpload = vi.fn(async (data: PhotoUploadData) => {

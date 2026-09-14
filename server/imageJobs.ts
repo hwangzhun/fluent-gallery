@@ -234,8 +234,10 @@ export async function startImageJobWorker() {
     WHEN status = 'processing' THEN 'queued'
     WHEN status = 'cleanup_processing' THEN 'cleanup_pending'
     WHEN status = 'failed_cleanup_processing' THEN 'failed_cleanup'
+    WHEN status = 'failed' AND error = '腾讯云未返回完整的 AVIF 处理结果' THEN 'queued'
     ELSE status END, updated_at = datetime('now')
-    WHERE status IN ('processing', 'cleanup_processing', 'failed_cleanup_processing')`);
+    WHERE status IN ('processing', 'cleanup_processing', 'failed_cleanup_processing')
+       OR (status = 'failed' AND error = '腾讯云未返回完整的 AVIF 处理结果')`);
   kickImageJobWorker();
   timer = setInterval(kickImageJobWorker, 5_000);
 }

@@ -5,7 +5,7 @@ services:
       target: runtime
       args:
         VITE_API_BASE_URL: /api
-    image: hwangzhun/fluent-gallery:V1.0.4
+    image: hwangzhun/fluent-gallery:V1.0.5
     init: true
     restart: unless-stopped
     environment:

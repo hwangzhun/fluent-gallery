@@ -13,10 +13,10 @@ afterEach(() => {
 });
 
 describe('GalleryFooter', () => {
-  it('keeps the Hwangzhun copyright with the current year and no personal link', () => {
+  it('keeps the Fluent Gallery copyright with the current year and no personal link', () => {
     const { container } = render(<GalleryFooter />);
 
-    expect(screen.getByText(`© ${new Date().getFullYear()} Hwangzhun. All rights reserved.`)).toBeInTheDocument();
+    expect(screen.getByText(`© ${new Date().getFullYear()} Fluent Gallery. Created by Hwangzhun. All rights reserved.`)).toBeInTheDocument();
     expect(container.querySelector('a[href*="hwangzhun"]')).not.toBeInTheDocument();
   });
 

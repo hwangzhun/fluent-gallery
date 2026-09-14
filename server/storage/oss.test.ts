@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertOSSFileExists, generateFilePath, normalizePublicUrl, putTencentProcessedImages, validateTencentPublicUrl } from './oss';
+import { assertOSSFileExists, generateFilePath, normalizePublicUrl, putTencentProcessedImages, putTencentProcessedObject, validateTencentPublicUrl } from './oss';
 import type { OSSConfig, StorageConfig } from './config';
 
 describe('storage paths', () => {
@@ -87,6 +87,44 @@ describe('Tencent CI image processing', () => {
     } as any;
     await expect(putTencentProcessedImages(client, { buffer: Buffer.from('jpeg'), mimetype: 'image/jpeg', size: 4 }, config)).rejects.toThrow('完整的 AVIF');
     expect(client.deleteObject).toHaveBeenCalledTimes(2);
+  });
+
+  it('processes an existing COS object through the cloud image_process API', async () => {
+    let params: any;
+    const client = {
+      request: vi.fn((input: any, callback: (error: unknown, data?: unknown) => void) => {
+        params = input;
+        const operations = JSON.parse(input.Headers['Pic-Operations']);
+        const displayKey = operations.rules[0].fileid.replace(/^\//, '');
+        const thumbnailKey = operations.rules[1].fileid.replace(/^\//, '');
+        callback(null, { UploadResult: { ProcessResults: { Object: [
+          { Key: displayKey, Location: `default.example/${displayKey}`, Format: 'AVIF', Width: '2048', Height: '1365', Size: '96000' },
+          { Key: thumbnailKey, Location: `default.example/${thumbnailKey}`, Format: 'AVIF', Width: '720', Height: '480', Size: '18000' },
+        ] } } });
+      }),
+      deleteObject: vi.fn(),
+    } as any;
+
+    const result = await putTencentProcessedObject(client, 'fluent_gallery/incoming/source.jpg', config);
+
+    expect(client.request).toHaveBeenCalledTimes(1);
+    expect(params).toMatchObject({
+      Bucket: config.bucket,
+      Region: config.region,
+      Key: 'fluent_gallery/incoming/source.jpg',
+      Method: 'POST',
+      Action: 'image_process',
+    });
+    expect(params).not.toHaveProperty('CopySource');
+    expect(JSON.parse(params.Headers['Pic-Operations']).rules).toHaveLength(2);
+    expect(result).toMatchObject({
+      url: expect.stringMatching(/^https:\/\/media\.hwangzhun\.com\/fluent_gallery\/photos\//),
+      thumbnailUrl: expect.stringMatching(/^https:\/\/media\.hwangzhun\.com\/fluent_gallery\/thumbs\//),
+      width: 2048,
+      height: 1365,
+      displayBytes: 96000,
+      thumbnailBytes: 18000,
+    });
   });
 
   it('accepts an enabled REST domain that reaches COS even when the root is forbidden', async () => {

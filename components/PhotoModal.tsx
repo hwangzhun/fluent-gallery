@@ -60,6 +60,10 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     closeButtonRef.current?.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !closeDisabled) requestClose();
     };
