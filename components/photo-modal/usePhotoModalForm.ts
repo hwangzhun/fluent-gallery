@@ -1,3 +1,4 @@
+import { settingsService, type AuthorSettings } from '../../api/settingsService';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
 import type { Photo } from '../../types';
 import {
@@ -21,13 +22,19 @@ import type {
   ExifData,
   PhotoFormData,
   PhotoModalProps,
+  PhotoUploadResult,
   PhotoUploadItem,
+  QueuedPhotoUpload,
 } from './types';
 
 interface UsePhotoModalFormOptions extends Pick<
   PhotoModalProps,
-  'mode' | 'photo' | 'onClose' | 'onUpload' | 'onUploadBatchComplete' | 'onUpdate'
+  'isOpen' | 'mode' | 'photo' | 'onClose' | 'onUpload' | 'onUploadBatchComplete' | 'onUpdate'
 > {}
+
+function isQueuedPhotoUpload(result: PhotoUploadResult | void): result is QueuedPhotoUpload {
+  return Boolean(result && 'kind' in result && result.kind === 'queued');
+}
 
 function emptyFormData(): PhotoFormData {
   return { title: '', year: new Date().getFullYear(), tags: '', exif: {} };
@@ -55,6 +62,7 @@ function formDataFromPhoto(photo: Photo): PhotoFormData {
 }
 
 export function usePhotoModalForm({
+  isOpen,
   mode,
   photo,
   onClose,
@@ -74,6 +82,10 @@ export function usePhotoModalForm({
   const nextId = useRef(0);
   const previewUrls = useRef(new Set<string>());
   const uploadInFlight = useRef(false);
+  const authorRequest = useRef<Promise<AuthorSettings | null> | null>(null);
+  const [authorReady, setAuthorReady] = useState(false);
+  const [authorError, setAuthorError] = useState('');
+  const editedFields = useRef(new Map<string, Set<BatchFieldKey>>());
 
   const isUploadMode = mode === 'upload';
   const isEditMode = mode === 'edit';
@@ -83,6 +95,7 @@ export function usePhotoModalForm({
   );
   const completedCount = items.filter(item => item.uploadStatus === 'success' || item.uploadStatus === 'failed').length;
   const successCount = items.filter(item => item.uploadStatus === 'success').length;
+  const processingCount = items.filter(item => item.uploadStatus === 'processing').length;
   const failedCount = items.filter(item => item.uploadStatus === 'failed').length;
 
   useEffect(() => {
@@ -97,19 +110,51 @@ export function usePhotoModalForm({
     previewUrls.current.clear();
   }, []);
 
+  const loadAuthorSettings = () => {
+    setAuthorReady(false);
+    setAuthorError('');
+    const request = settingsService.getAuthorSettings().then(value => {
+      if (authorRequest.current === request) setAuthorReady(true);
+      return value;
+    }).catch(() => {
+      if (authorRequest.current === request) setAuthorError('无法读取作者默认值，请重试后上传。');
+      return null;
+    });
+    authorRequest.current = request;
+  };
+
+  useEffect(() => {
+    if (!isOpen || !isUploadMode) return;
+    loadAuthorSettings();
+    return () => { authorRequest.current = null; };
+  }, [isOpen, isUploadMode]);
+
   const parseItemExif = async (itemId: string, file: File) => {
-    const parsed = await parsePhotoExif(file);
-    setItems(current => current.map(item => item.id === itemId
-      ? {
-          ...item,
-          exifStatus: 'ready',
-          data: {
-            ...item.data,
-            year: parsed.year ?? item.data.year,
-            exif: parsed.exif,
-          },
+    const request = authorRequest.current;
+    const [parsed, defaults] = await Promise.all([parsePhotoExif(file), request]);
+    if (!defaults || request !== authorRequest.current) return;
+    setItems(current => current.map(item => {
+      if (item.id !== itemId || item.exifStatus === 'ready') return item;
+      const touched = editedFields.current.get(itemId);
+      const exif: ExifData = { ...parsed.exif,
+        ...(defaults.author ? { author: defaults.author } : {}),
+        ...(defaults.copyright ? { copyright: defaults.copyright } : {}),
+      };
+      for (const field of touched || []) {
+        if (field.startsWith('exif.')) {
+          const key = field.slice(5) as keyof ExifData;
+          Object.assign(exif, { [key]: item.data.exif[key] });
         }
-      : item));
+      }
+      return { ...item, exifStatus: 'ready', data: { ...item.data,
+        year: touched?.has('year') ? item.data.year : parsed.year ?? item.data.year, exif } };
+    }));
+  };
+
+  const retryAuthorSettings = () => {
+    setError(null);
+    loadAuthorSettings();
+    void runWithConcurrency<PhotoUploadItem>(items.filter(item => item.exifStatus === 'loading'), EXIF_PARSE_CONCURRENCY, item => parseItemExif(item.id, item.file));
   };
 
   const addFiles = (files: File[]) => {
@@ -205,6 +250,13 @@ export function usePhotoModalForm({
     }
     if (phase !== 'editing' || !activeItem) return;
 
+    for (const item of items) {
+      if (item.id === activeItem.id || sharedFields.has(field)) {
+        const touched = editedFields.current.get(item.id) || new Set<BatchFieldKey>();
+        touched.add(field);
+        editedFields.current.set(item.id, touched);
+      }
+    }
     setItems(current => current.map(item => (
       item.id === activeItem.id || sharedFields.has(field)
         ? { ...item, data: updatePhotoFormField(item.data, field, value) }
@@ -228,6 +280,7 @@ export function usePhotoModalForm({
     setItems([]);
     setActiveId(null);
     setSharedFields(new Set());
+    editedFields.current.clear();
     setPhase('editing');
     setSelectionNotice('');
   };
@@ -249,6 +302,7 @@ export function usePhotoModalForm({
     let succeeded = 0;
     let failed = 0;
     const photos: Photo[] = [];
+    const jobs: QueuedPhotoUpload[] = [];
     const failedIds: string[] = [];
 
     await runWithConcurrency(targets, targets.some(item => item.data.albumIds?.length) ? 1 : UPLOAD_CONCURRENCY, async target => {
@@ -258,11 +312,14 @@ export function usePhotoModalForm({
       try {
         if (!onUpload) throw new Error('上传功能不可用');
         const laterIds = items.slice(items.findIndex(item => item.id === target.id) + 1).flatMap(item => item.uploadedPhoto ? [item.uploadedPhoto.id] : []);
-        const uploadedPhoto = await onUpload({ file: target.file, ...target.data, ...(target.data.albumIds?.length && laterIds.length ? { albumBeforePhotoIds: laterIds } : {}) });
+        const uploadResult = await onUpload({ file: target.file, ...target.data, ...(target.data.albumIds?.length && laterIds.length ? { albumBeforePhotoIds: laterIds } : {}) });
         succeeded += 1;
+        const queuedUpload = isQueuedPhotoUpload(uploadResult) ? uploadResult : undefined;
+        const uploadedPhoto = uploadResult && !isQueuedPhotoUpload(uploadResult) ? uploadResult : undefined;
         if (uploadedPhoto) photos.push(uploadedPhoto);
+        if (queuedUpload) jobs.push(queuedUpload);
         setItems(current => current.map(item => item.id === target.id
-          ? { ...item, uploadStatus: 'success', uploadedPhoto: uploadedPhoto || undefined, error: undefined }
+          ? { ...item, uploadStatus: queuedUpload ? 'processing' : 'success', uploadedPhoto, queuedUpload, error: undefined }
           : item));
       } catch (uploadError) {
         failed += 1;
@@ -274,7 +331,7 @@ export function usePhotoModalForm({
       }
     });
 
-    const result: BatchUploadResult = { attempted: targets.length, succeeded, failed, photos };
+    const result: BatchUploadResult = { attempted: targets.length, succeeded, failed, photos, jobs };
     if (failedIds.length) setActiveId(failedIds[0]);
     try {
       await onUploadBatchComplete?.(result);
@@ -306,6 +363,7 @@ export function usePhotoModalForm({
     }
 
     if (phase !== 'editing' || items.length === 0) return;
+    if (!authorReady || items.some(item => item.exifStatus !== 'ready')) { setError('请等待照片信息和作者默认值读取完成。'); return; }
     const invalidItem = items.find(item => !isPhotoFormValid(item.data));
     if (invalidItem) {
       setActiveId(invalidItem.id);
@@ -362,6 +420,9 @@ export function usePhotoModalForm({
   };
 
   return {
+    authorError,
+    retryAuthorSettings,
+    metadataLoading: !authorReady || items.some(item => item.exifStatus !== 'ready'),
     activeItem,
     completedCount,
     editData,
@@ -385,6 +446,7 @@ export function usePhotoModalForm({
     setActiveId,
     sharedFields,
     successCount,
+    processingCount,
     toggleSharedField,
     updateField,
   };

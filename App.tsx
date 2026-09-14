@@ -1,3 +1,4 @@
+import { getHeroImages } from './shared/hero';
 import { AlbumsPage } from './components/AlbumsPage';
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { HashRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
@@ -6,6 +7,7 @@ import { MasonryGallery } from './components/MasonryGallery';
 import { photoService } from './api/photoService';
 import { GallerySettings, settingsService } from './api/settingsService';
 import { FilterState, Photo } from './types';
+import { AnalyticsTracker } from './components/AnalyticsTracker';
 
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 
@@ -21,7 +23,8 @@ function PublicGalleryPage() {
   const [error, setError] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
   const [filter, setFilter] = useState<FilterState>({ year: null, tag: null });
-  const [gallerySettings, setGallerySettings] = useState<GallerySettings>({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' });
+  const [gallerySettings, setGallerySettings] = useState<GallerySettings>({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain', heroAspectRatio: '4:3', heroImagePositionX: 50, heroImagePositionY: 50, heroImageScale: 1, heroImagePositionPhotoId: null });
+  const [heroRandom] = useState(() => Math.random());
   const [configuredHero, setConfiguredHero] = useState<Photo | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [sharedPhoto, setSharedPhoto] = useState<Photo | null>(null);
@@ -53,12 +56,17 @@ function PublicGalleryPage() {
       .then(async settings => {
         if (!active) return;
         setGallerySettings(settings);
-        if (settings.heroPhotoId) {
+        const candidates = getHeroImages(settings);
+        const start = Math.floor(heroRandom * candidates.length);
+        for (let offset = 0; offset < candidates.length && active; offset += 1) {
+          const candidate = candidates[(start + offset) % candidates.length];
           try {
-            const hero = await photoService.getPhotoById(settings.heroPhotoId);
+            const hero = await photoService.getPhotoById(candidate.photoId);
             if (active) setConfiguredHero(hero);
-          } catch { if (active) setConfiguredHero(null); }
+            return;
+          } catch { /* A deleted or unavailable candidate should not hide the remaining artworks. */ }
         }
+        if (active) setConfiguredHero(null);
       })
       .catch(error => console.error('Failed to load gallery settings', error))
       .finally(() => { if (active) setSettingsLoading(false); });
@@ -137,9 +145,9 @@ function PublicGalleryPage() {
 }
 
 export default function App() {
-  return <Router><Routes>
+  return <Router><AnalyticsTracker /><Routes>
     <Route path="/" element={<PublicGalleryPage />} />
     <Route path="/albums" element={<AlbumsPage />} />
-    <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen grid place-items-center bg-slate-100 text-slate-500">正在加载控制台…</div>}><AdminDashboard /></Suspense>} />
+    <Route path="/admin/*" element={<Suspense fallback={<div className="min-h-screen grid place-items-center bg-slate-100 text-slate-500">正在加载控制台…</div>}><AdminDashboard /></Suspense>} />
   </Routes></Router>;
 }

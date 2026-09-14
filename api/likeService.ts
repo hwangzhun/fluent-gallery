@@ -12,7 +12,10 @@ interface ApiResponse<T> {
 interface LikeResponse {
   liked: boolean;
   likesCount: number;
+  created: boolean;
 }
+
+type ServerLikeResponse = Omit<LikeResponse, 'created'>;
 
 interface LikeStatusResponse {
   liked: boolean;
@@ -142,14 +145,16 @@ class LikeService {
           const status = await this.getLikeStatus(photoId);
           return {
             liked: true,
-            likesCount: status.likesCount
+            likesCount: status.likesCount,
+            created: false
           };
         } catch (error) {
           // 如果获取状态失败，返回本地缓存的点赞数
           const count = await this.getLikeCount(photoId).catch(() => 0);
           return {
             liked: true,
-            likesCount: count
+            likesCount: count,
+            created: false
           };
         }
       }
@@ -182,13 +187,13 @@ class LikeService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result: ApiResponse<LikeResponse> = await response.json();
+      const result: ApiResponse<ServerLikeResponse> = await response.json();
 
       if (!result.success) {
         // 如果已经点过赞，也标记为已点赞
         if (result.code === 'ALREADY_LIKED' && result.data) {
           this.markAsLiked(photoId);
-          return result.data;
+          return { ...result.data, created: false };
         }
         throw new Error(result.error || '点赞失败');
       }
@@ -196,7 +201,7 @@ class LikeService {
       // 标记为已点赞
       this.markAsLiked(photoId);
 
-      return result.data;
+      return { ...result.data, created: true };
     } catch (error: any) {
       console.error('点赞失败:', error);
       
@@ -291,4 +296,3 @@ class LikeService {
 }
 
 export const likeService = new LikeService();
-

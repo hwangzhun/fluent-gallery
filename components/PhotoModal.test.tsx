@@ -6,9 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import exifr from 'exifr';
 import type { Photo } from '../types';
 import { PhotoModal, type PhotoUploadData } from './PhotoModal';
+import { settingsService } from '../api/settingsService';
 import { aiService } from '../api/aiService';
 
 vi.mock('../api/albumService', () => ({ albumService: { list: vi.fn().mockResolvedValue([{ id: 'album-one', name: '旅行', published: false }]) } }));
+
+vi.mock('../api/settingsService', () => ({ settingsService: { getAuthorSettings: vi.fn().mockResolvedValue({ author: '', copyright: '' }) } }));
 
 vi.mock('exifr', () => ({ default: { parse: vi.fn() } }));
 vi.mock('../api/tagService', () => ({
@@ -43,6 +46,7 @@ describe('PhotoModal batch upload', () => {
 
   beforeEach(() => {
     previewIndex = 0;
+    vi.mocked(settingsService.getAuthorSettings).mockReset().mockResolvedValue({ author: '', copyright: '' });
     vi.mocked(exifr.parse).mockResolvedValue(undefined);
     vi.mocked(aiService.suggestMetadata).mockResolvedValue({ title: '风里的光', tags: ['日常', '光影', '街头'] });
     Object.defineProperty(URL, 'createObjectURL', {
@@ -68,6 +72,23 @@ describe('PhotoModal batch upload', () => {
 
     rerender(<PhotoModal isOpen={false} mode="upload" onClose={vi.fn()} />);
     expect(document.body.style.overflow).toBe('auto');
+  });
+
+  it('protects a desktop workspace draft before leaving and releases it after confirmation', async () => {
+    const onClose = vi.fn();
+    render(<PhotoModal isOpen mode="upload" presentation="workspace" onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('draft.jpg')] } });
+    await screen.findByLabelText('照片数量：1');
+
+    const beforeUnload = new Event('beforeunload', { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '返回照片管理' }));
+    expect(screen.getByRole('dialog', { name: '离开上传工作区？' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '确认离开' }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-0');
   });
 
   it('appends photos and only synchronizes a public field after it is edited', async () => {
@@ -250,6 +271,50 @@ describe('PhotoModal batch upload', () => {
     fireEvent.click(screen.getByRole('button', { name: '重试失败项（1）' }));
     await screen.findByText('成功 3 张');
     expect(onUpload).toHaveBeenLastCalledWith(expect.objectContaining({ albumIds: ['album-one'], albumBeforePhotoIds: ['photo-second.jpg', 'photo-third.jpg'] }));
+  });
+
+
+  it('applies configured authors over EXIF and keeps manual batch edits during slow parsing and upload retries', async () => {
+    vi.mocked(settingsService.getAuthorSettings).mockResolvedValue({ author: '默认作者', copyright: '© 默认' });
+    let finishSecond!: (value: unknown) => void;
+    vi.mocked(exifr.parse).mockImplementation((selected) => (selected as File).name === 'second.jpg'
+      ? new Promise(resolve => { finishSecond = resolve; })
+      : Promise.resolve({ Artist: 'EXIF 作者', Copyright: 'EXIF 版权' }));
+    const onUpload = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('网络中断')).mockResolvedValue(undefined);
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} onUpload={onUpload} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('first.jpg'), file('second.jpg')] } });
+    fireEvent.click(screen.getByRole('tab', { name: '拍摄信息' }));
+    await waitFor(() => expect(screen.getByLabelText('作者')).toHaveValue('默认作者'));
+    expect(screen.getByLabelText('版权')).toHaveValue('© 默认');
+    expect(screen.getByRole('button', { name: '上传 2 张照片' })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('将作者设为公共字段'));
+    fireEvent.change(screen.getByLabelText('作者'), { target: { value: '手动作者' } });
+    fireEvent.click(screen.getByLabelText('将版权设为公共字段'));
+    fireEvent.change(screen.getByLabelText('版权'), { target: { value: '' } });
+    await act(async () => { finishSecond({ Artist: '迟到的 EXIF', Copyright: '迟到的版权' }); });
+    await waitFor(() => expect(screen.getByRole('button', { name: '上传 2 张照片' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '上传 2 张照片' }));
+    fireEvent.click(await screen.findByRole('button', { name: '重试失败项（1）' }));
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(3));
+    for (const [data] of onUpload.mock.calls) expect(data.exif).toMatchObject({ author: '手动作者', copyright: '' });
+  });
+
+  it('blocks uploads until failed default loading is retried and keeps unconfigured EXIF fields', async () => {
+    vi.mocked(settingsService.getAuthorSettings).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ author: '默认作者', copyright: '' });
+    vi.mocked(exifr.parse).mockResolvedValue({ Artist: 'EXIF 作者', Copyright: 'EXIF 版权' });
+    const onUpload = vi.fn();
+    render(<PhotoModal isOpen mode="upload" onClose={vi.fn()} onUpload={onUpload} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('first.jpg')] } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法读取作者默认值');
+    expect(screen.getByRole('button', { name: '上传 1 张照片' })).toBeDisabled();
+    fireEvent.submit(document.getElementById('photo-form')!);
+    expect(onUpload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '重试读取' }));
+    fireEvent.click(screen.getByRole('tab', { name: '拍摄信息' }));
+    await waitFor(() => expect(screen.getByLabelText('作者')).toHaveValue('默认作者'));
+    expect(screen.getByLabelText('版权')).toHaveValue('EXIF 版权');
+    fireEvent.click(screen.getByRole('button', { name: '上传 1 张照片' }));
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({ exif: expect.objectContaining({ author: '默认作者', copyright: 'EXIF 版权' }) })));
   });
 
 });

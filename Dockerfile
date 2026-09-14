@@ -29,6 +29,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --chown=node:node --from=build /app/dist ./dist
 COPY --chown=node:node server ./server
 COPY --chown=node:node database ./database
+COPY --chown=node:node shared ./shared
 COPY --chown=node:node tsconfig.json ./tsconfig.json
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 

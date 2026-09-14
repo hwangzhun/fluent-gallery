@@ -3,7 +3,7 @@
  */
 import express from 'express';
 import multer from 'multer';
-import { getSTSCredentials, getOSSClient, generateFilePath, putOSSFile } from '../storage/oss';
+import { getOSSClient, generateFilePath, putOSSFile } from '../storage/oss';
 import { storageConfig, loadStorageConfig } from '../storage/config';
 
 const router = express.Router();
@@ -28,53 +28,11 @@ const upload = multer({
 
 /**
  * GET /api/oss/sts
- * 获取 STS 临时凭证（用于前端直传 OSS）
+ * This legacy endpoint intentionally does not return storage credentials.
+ * Photo uploads use a short-lived URL signed for one object instead.
  */
 router.get('/sts', async (req, res) => {
-  try {
-    // 动态加载最新配置
-    const config = await loadStorageConfig();
-    
-    // 检查是否配置了 OSS
-    if (config.mode !== 'oss') {
-      return res.status(400).json({
-        success: false,
-        error: '当前存储模式不是 OSS，无法获取 STS 凭证'
-      });
-    }
-
-    if (!config.oss) {
-      return res.status(400).json({
-        success: false,
-        error: 'OSS 配置不存在'
-      });
-    }
-
-    // 获取 STS 临时凭证
-    const credentials = await getSTSCredentials();
-
-    res.json({
-      success: true,
-      data: {
-        accessKeyId: credentials.accessKeyId,
-        accessKeySecret: credentials.accessKeySecret,
-        securityToken: credentials.securityToken,
-        expiration: credentials.expiration,
-        region: credentials.region,
-        bucket: credentials.bucket,
-        endpoint: config.oss.endpoint,
-        provider: credentials.provider || config.oss.provider || 'aliyun',
-        uploadDir: config.oss.uploadDir
-      }
-    });
-  } catch (error: any) {
-    console.error('获取 STS 凭证失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '获取 STS 凭证失败',
-      message: error.message
-    });
-  }
+  res.status(410).json({ success: false, error: '此接口已停用；照片上传使用单对象预签名 URL' });
 });
 
 /**

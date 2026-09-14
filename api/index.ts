@@ -8,3 +8,4 @@ export { settingsService } from './settingsService';
 export { logService } from './logService';
 export { likeService } from './likeService';
 export { viewService } from './viewService';
+export { analytics } from './analyticsService';

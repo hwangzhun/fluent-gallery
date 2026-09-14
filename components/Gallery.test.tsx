@@ -5,14 +5,14 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MasonryGallery } from './MasonryGallery';
 import { Lightbox } from './Lightbox';
-import { viewService } from '../api';
+import { likeService, viewService } from '../api';
 import type { Photo } from '../types';
 
 vi.mock('../api', () => ({
   likeService: {
     isLiked: vi.fn().mockReturnValue(false),
     getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }),
-    likePhoto: vi.fn().mockResolvedValue({ liked: true, likesCount: 1 }),
+    likePhoto: vi.fn().mockResolvedValue({ liked: true, likesCount: 1, created: true }),
   },
   viewService: {
     getViewStatus: vi.fn().mockResolvedValue({ viewsCount: 0 }),
@@ -28,7 +28,7 @@ vi.mock('../api/tagService', () => ({
 
 const first: Photo = { id: 'one', title: '树影', url: '/one.jpg', thumbnailUrl: '/one-small.jpg', width: 1200, height: 800, year: 2026, tags: ['街巷'], createdAt: '2026-01-01', likesCount: 0, viewsCount: 0 };
 const second: Photo = { ...first, id: 'two', title: '街角', url: '/two.jpg', thumbnailUrl: '/two-small.jpg', year: 2025 };
-const galleryProps = { photos: [first, second], loading: false, error: null, filter: { year: null, tag: null }, gallerySettings: { randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' as const }, onFilterChange: vi.fn(), onRetry: vi.fn() };
+const galleryProps = { photos: [first, second], loading: false, error: null, filter: { year: null, tag: null }, gallerySettings: { randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' as const, heroAspectRatio: '4:3' as const, heroImagePositionX: 50, heroImagePositionY: 50, heroImageScale: 1, heroImagePositionPhotoId: null }, onFilterChange: vi.fn(), onRetry: vi.fn() };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -83,10 +83,22 @@ describe('public gallery', () => {
 
   it('uses the configured Hero photo and its fill mode', async () => {
     const portrait = { ...second, id: 'portrait', title: '竖幅封面', width: 800, height: 1200 };
-    render(<MasonryGallery {...galleryProps} photos={[first, portrait]} gallerySettings={{ randomizePhotos: false, heroPhotoId: portrait.id, heroImageFit: 'cover' }} />);
+    render(<MasonryGallery {...galleryProps} photos={[first, portrait]} gallerySettings={{ randomizePhotos: false, heroPhotoId: portrait.id, heroImageFit: 'cover', heroAspectRatio: 'xpan', heroImagePositionX: 25, heroImagePositionY: 70, heroImageScale: 1.5, heroImagePositionPhotoId: portrait.id }} />);
     await act(async () => {});
     const hero = screen.getByRole('button', { name: '查看封面作品：竖幅封面' });
     expect(hero).toHaveClass('is-cover');
+    expect(hero.style.getPropertyValue('--hero-position-x')).toBe('25%');
+    expect(hero.style.getPropertyValue('--hero-position-y')).toBe('70%');
+    expect(hero.style.getPropertyValue('--hero-image-scale')).toBe('1.5');
+    expect(hero.closest('.gallery-hero-art')).toHaveStyle({ '--hero-frame-ratio': '65 / 24' });
+  });
+
+  it('centers a Hero crop saved for a different photo', async () => {
+    render(<MasonryGallery {...galleryProps} gallerySettings={{ ...galleryProps.gallerySettings, heroImageFit: 'cover', heroImagePositionX: 10, heroImagePositionY: 90, heroImagePositionPhotoId: second.id }} />);
+    await act(async () => {});
+    const hero = screen.getByRole('button', { name: '查看封面作品：树影' });
+    expect(hero.style.getPropertyValue('--hero-position-x')).toBe('50%');
+    expect(hero.style.getPropertyValue('--hero-position-y')).toBe('50%');
   });
 
   it('randomizes only the unfiltered client-side waterfall', async () => {
@@ -169,4 +181,51 @@ describe('public gallery', () => {
     expect(viewService.recordView).toHaveBeenCalledOnce();
     expect(document.body.style.overflow).not.toBe('hidden');
   });
+});
+
+
+it('defaults to compact on mobile while keeping the visitor’s manual choice', async () => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+  const { container, rerender } = render(<MasonryGallery {...galleryProps} />);
+  expect(screen.getByRole('button', { name: '紧凑布局' })).toHaveAttribute('aria-pressed', 'true');
+  expect(container.querySelector('.gallery-grid')).toHaveClass('is-compact');
+  fireEvent.click(screen.getByRole('button', { name: '舒展布局' }));
+  rerender(<MasonryGallery {...galleryProps} photos={[second]} />);
+  expect(container.querySelector('.gallery-grid')).not.toHaveClass('is-compact');
+  vi.unstubAllGlobals();
+});
+
+it('uses the selected candidate’s own settings outside the loaded photo page', async () => {
+  const { container } = render(<MasonryGallery {...galleryProps} photos={[first]} configuredHero={second} gallerySettings={{ ...galleryProps.gallerySettings, heroImages: [
+    { photoId: first.id, fit: 'contain', aspectRatio: '4:3', positionX: 50, positionY: 50, scale: 1 },
+    { photoId: second.id, fit: 'cover', aspectRatio: '2.35:1', positionX: 30, positionY: 70, scale: 2 },
+  ] }} />);
+  const hero = screen.getByRole('button', { name: '查看封面作品：街角' });
+  expect(hero.style.getPropertyValue('--hero-image-scale')).toBe('2');
+  expect(container.querySelector('.gallery-hero-art')).toHaveStyle({ '--hero-frame-ratio': '2.35 / 1' });
+  fireEvent.click(hero);
+  expect(screen.getByRole('dialog', { name: '作品：街角' })).toBeInTheDocument();
+  await act(async () => {});
+});
+
+it('shows stats above the title, allows retrying likes, and does not recount when opening details', async () => {
+  vi.useFakeTimers();
+  vi.mocked(likeService.likePhoto).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ liked: true, likesCount: 1, created: true });
+  const { container } = render(<Lightbox photo={first} albumName="测试画册" onClose={vi.fn()} onNext={vi.fn()} onPrev={vi.fn()} hasNext={false} hasPrev={false} />);
+  await act(async () => {});
+  const stats = container.querySelector('.lightbox-stats')!;
+  expect(stats.nextElementSibling?.tagName).toBe('H2');
+  expect(container.querySelector('.lightbox-details .lightbox-stats')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '喜欢这幅作品' }));
+  await act(async () => {});
+  expect(screen.getByRole('status')).toHaveTextContent('暂时无法点赞');
+  fireEvent.click(screen.getByRole('button', { name: '喜欢这幅作品' }));
+  await act(async () => {});
+  expect(screen.getByRole('button', { name: '已喜欢这幅作品' })).toBeDisabled();
+  expect(likeService.likePhoto).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  fireEvent.click(screen.getByRole('button', { name: '作品信息' }));
+  fireEvent.click(screen.getByRole('button', { name: '作品信息' }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+  expect(viewService.recordView).toHaveBeenCalledExactlyOnceWith(first.id);
 });

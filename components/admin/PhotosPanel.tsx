@@ -1,12 +1,12 @@
 import { albumService, type Album } from '../../api/albumService';
 import { AlbumSelector } from './AlbumSelector';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckSquare, ChevronLeft, ChevronRight, Edit3, Eye, Filter, Grid2X2, Heart, ImagePlus, List, Search, Tag, Trash2, X } from 'lucide-react';
 import { PhotoImage } from '../PhotoImage';
 import { Photo } from '../../types';
 import { photoService, type AdminPhotoSort, type BulkPhotoChanges } from '../../api/photoService';
 import { tagService } from '../../api/tagService';
-import { photoUploadService } from '../../api/photoUploadService';
+import { forgetPendingUploadJobs, photoUploadService } from '../../api/photoUploadService';
 import { PhotoModal, type BatchUploadResult, type PhotoFormData, type PhotoUploadData } from '../PhotoModal';
 import { SelectMenu } from '../SelectMenu';
 
@@ -47,7 +47,7 @@ function BulkEditDialog({ count, onCancel, onSave, onDelete }: { count: number; 
   return <div role="dialog" aria-modal="true" aria-labelledby="bulk-edit-title" className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/45 p-4"><div className="w-full max-w-xl rounded-2xl bg-white p-6"><h2 id="bulk-edit-title">批量修改 {count} 张照片</h2><p className="mt-2 text-sm text-slate-600">只有勾选的字段会写入；EXIF 会保留未勾选的信息。</p><div className="mt-5 space-y-4"><label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={yearEnabled} onChange={event => setYearEnabled(event.target.checked)} />年份<input disabled={!yearEnabled} value={year} onChange={event => setYear(event.target.value)} type="number" className="ml-auto w-32 rounded border px-2 py-1.5" /></label><div className="rounded-lg border p-3"><div className="flex items-center gap-3 text-sm"><label className="inline-flex items-center gap-3"><input type="checkbox" checked={tagsEnabled} onChange={event => setTagsEnabled(event.target.checked)} />标签操作</label><SelectMenu disabled={!tagsEnabled} value={tagMode} onChange={setTagMode} ariaLabel="标签操作" className="ml-auto w-28" options={[{ value: 'append', label: '追加' }, { value: 'remove', label: '移除' }, { value: 'replace', label: '替换' }]} /></div><input disabled={!tagsEnabled} value={tags} onChange={event => setTags(event.target.value)} placeholder="用逗号分隔标签" className="mt-3 w-full rounded border px-3 py-2 text-sm" /></div><div className="rounded-lg border p-3"><p className="text-sm font-medium">EXIF</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.map(([key, label]) => <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(exifEnabled[key])} onChange={event => setExifEnabled(current => ({ ...current, [key]: event.target.checked }))} />{label}<input disabled={!exifEnabled[key]} value={exif[key] || ''} onChange={event => setExif(current => ({ ...current, [key]: event.target.value }))} className="min-w-0 flex-1 rounded border px-2 py-1" /></label>)}</div></div></div>{error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-between gap-3"><button onClick={onDelete} disabled={saving} className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700">删除所选照片</button><div className="flex gap-3"><button onClick={onCancel} disabled={saving} className="rounded-xl border px-4 py-2 text-sm">取消</button><button onClick={() => void submit()} disabled={saving} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{saving ? '正在保存…' : '应用修改'}</button></div></div></div></div>;
 }
 
-export function PhotosPanel({ onSessionExpired }: { onSessionExpired: () => void }) {
+export function PhotosPanel({ onSessionExpired, onOpenDesktopUpload, externalReloadVersion = 0 }: { onSessionExpired: () => void; onOpenDesktopUpload?: () => void; externalReloadVersion?: number }) {
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [year, setYear] = useState<number | null>(null);
@@ -78,12 +78,17 @@ export function PhotosPanel({ onSessionExpired }: { onSessionExpired: () => void
   const [albumError, setAlbumError] = useState('');
   const [targetAlbums, setTargetAlbums] = useState<string[]>([]);
   const [addingAlbums, setAddingAlbums] = useState(false);
+  const uploadTrackers = useRef(new Set<AbortController>());
+  useEffect(() => () => {
+    uploadTrackers.current.forEach(controller => controller.abort());
+    uploadTrackers.current.clear();
+  }, []);
   useEffect(() => {
     let active = true;
     albumService.list(true).then(data => { if (active) { setAlbums(data); setAlbumError(''); } })
       .catch(reason => { if (active) { setAlbumError(reason.message); if (/登录|会话|认证/.test(reason.message)) onSessionExpired(); } });
     return () => { active = false; };
-  }, [reloadVersion, onSessionExpired]);
+  }, [reloadVersion, externalReloadVersion, onSessionExpired]);
 
   useEffect(() => { const timer = window.setTimeout(() => { setSearch(query.trim()); setPage(1); }, 250); return () => window.clearTimeout(timer); }, [query]);
   useEffect(() => { tagService.getAvailableYears().then(setAvailableYears).catch(() => setAvailableYears([])); tagService.getAllTagNames().then(setAvailableTags).catch(() => setAvailableTags([])); }, [reloadVersion]);
@@ -102,15 +107,65 @@ export function PhotosPanel({ onSessionExpired }: { onSessionExpired: () => void
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [page, pageSize, albumId, year, tags, search, sort, reloadVersion, onSessionExpired]);
-  useEffect(() => { setSelectedIds(new Set()); }, [page, pageSize, albumId, year, tags, search, sort, reloadVersion]);
+  }, [page, pageSize, albumId, year, tags, search, sort, reloadVersion, externalReloadVersion, onSessionExpired]);
+  useEffect(() => { setSelectedIds(new Set()); }, [page, pageSize, albumId, year, tags, search, sort, reloadVersion, externalReloadVersion]);
 
   const activeFilters = useMemo(() => Boolean(query || year || tags.length || albumId), [query, year, tags, albumId]);
   const clear = () => { setAlbumId(''); setQuery(''); setSearch(''); setYear(null); setTags([]); setPage(1); };
   const toggleTag = (value: string) => { setTags(current => current.includes(value) ? current.filter(tag => tag !== value) : [...current, value]); setPage(1); };
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2600); };
   const upload = async (data: PhotoUploadData) => photoUploadService.uploadPhoto(data);
-  const completeUploadBatch = async (result: BatchUploadResult) => { setPage(1); setReloadVersion(value => value + 1); showNotice(result.failed ? `已上传 ${result.succeeded} 张，${result.failed} 张失败` : `已上传 ${result.succeeded} 张照片`); };
+  const trackQueuedUploads = (jobIds: string[]) => {
+    const controller = new AbortController();
+    uploadTrackers.current.add(controller);
+    void (async () => {
+      const pending = new Set(jobIds);
+      let completed = 0;
+      let failed = 0;
+      let failureMessage = '';
+      let requestFailures = 0;
+      for (let poll = 0; poll < 120 && pending.size > 0 && !controller.signal.aborted; poll += 1) {
+        try {
+          const statuses = await photoUploadService.getJobStatuses([...pending], controller.signal);
+          requestFailures = 0;
+          let changed = false;
+          const returnedIds = new Set(statuses.map(status => status.id));
+          const missingIds = [...pending].filter(id => !returnedIds.has(id));
+          if (missingIds.length) {
+            missingIds.forEach(id => pending.delete(id));
+            forgetPendingUploadJobs(missingIds);
+            failed += missingIds.length;
+            failureMessage ||= '部分图片处理任务已丢失，请重新上传';
+            changed = true;
+          }
+          statuses.forEach(status => {
+            if (status.status === 'completed') { pending.delete(status.id); forgetPendingUploadJobs([status.id]); completed += 1; changed = true; }
+            if (status.status === 'failed') { pending.delete(status.id); forgetPendingUploadJobs([status.id]); failed += 1; failureMessage ||= status.error || ''; changed = true; }
+          });
+          if (changed) { setPage(1); setReloadVersion(value => value + 1); }
+          if (pending.size === 0) {
+            showNotice(failed ? (failureMessage || `处理完成 ${completed} 张，${failed} 张失败，源文件已保留`) : `已完成 ${completed} 张照片处理`);
+            return;
+          }
+        } catch (reason) {
+          if (controller.signal.aborted) return;
+          requestFailures += 1;
+          const message = reason instanceof Error ? reason.message : '查询图片处理状态失败';
+          if (/登录|会话|认证/.test(message)) { onSessionExpired(); return; }
+          if (requestFailures >= 3) { showNotice(message); return; }
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 1_500));
+      }
+      if (!controller.signal.aborted && pending.size > 0) showNotice(`${pending.size} 张照片仍在后台处理`);
+    })().finally(() => uploadTrackers.current.delete(controller));
+  };
+  const completeUploadBatch = async (result: BatchUploadResult) => {
+    if (result.photos.length) { setPage(1); setReloadVersion(value => value + 1); }
+    if (result.jobs.length) trackQueuedUploads(result.jobs.map(job => job.jobId));
+    showNotice(result.failed
+      ? `已提交 ${result.succeeded} 张，${result.failed} 张上传失败`
+      : result.jobs.length ? `已提交 ${result.jobs.length} 张后台处理` : `已上传 ${result.succeeded} 张照片`);
+  };
   const update = async (id: string, data: PhotoFormData) => {
     await photoService.updatePhoto(id, { albumIds: data.albumIds, title: data.title, year: Number(data.year), tags: data.tags.split(',').map(tag => tag.trim()).filter(Boolean), exif: { camera: data.exif.camera || '', lens: data.exif.lens || '', aperture: data.exif.aperture || '', shutterSpeed: data.exif.shutterSpeed || '', iso: data.exif.iso || '', author: data.exif.author || '', copyright: data.exif.copyright || '', city: data.exif.city || '', province: data.exif.province || '', country: data.exif.country || '' } });
     setReloadVersion(value => value + 1); showNotice('照片已更新');
@@ -135,9 +190,14 @@ export function PhotosPanel({ onSessionExpired }: { onSessionExpired: () => void
   const changeThumbnailSize = (value: number) => { localStorage.setItem('fluent-gallery-admin-thumbnail-size', String(value)); setThumbnailSize(value); };
   const rangeStart = total ? (page - 1) * pageSize + 1 : 0;
   const rangeEnd = Math.min(page * pageSize, total);
+  const openUpload = () => {
+    setEditing(null);
+    if (window.matchMedia?.('(min-width: 801px)').matches && onOpenDesktopUpload) onOpenDesktopUpload();
+    else setModal('upload');
+  };
 
   return <section className="space-y-5" aria-busy={loading} style={{ '--studio-thumbnail-size': `${thumbnailSize}px`, '--studio-card-size': `${Math.round(thumbnailSize * 2.15)}px` } as React.CSSProperties}>
-    <div className="studio-photo-toolbar flex flex-col gap-4 border border-slate-200 bg-white p-4 xl:flex-row xl:items-center"><div className="relative flex-1"><Search size={18} className="absolute left-3 top-3 text-slate-400" /><input aria-label="搜索照片" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索标题、标签或拍摄地点…" className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm" /></div><div className="flex flex-wrap items-center gap-2"><label className="studio-photo-sort"><span>排序</span><SelectMenu ariaLabel="照片排序" value={sort} onChange={value => { setSort(value); localStorage.setItem('fluent-gallery-admin-photo-sort', value); setPage(1); }} options={[{ value: 'latest', label: '最新上传' }, { value: 'likes', label: '最多点赞' }, { value: 'views', label: '最多浏览' }]} /></label><label className="studio-thumbnail-slider"><span>缩略图</span><input aria-label="调整照片显示大小" type="range" min={THUMBNAIL_MIN} max={THUMBNAIL_MAX} step={THUMBNAIL_STEP} value={thumbnailSize} onChange={event => changeThumbnailSize(Number(event.target.value))} /><output>{thumbnailSize}px</output></label><button aria-expanded={filterOpen} onClick={() => setFilterOpen(value => !value)} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${activeFilters ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-700'}`}><Filter size={17} />筛选{tags.length ? ` (${tags.length})` : ''}</button><div className="inline-flex rounded-xl border border-slate-300 p-1"><button aria-label="列表视图" aria-pressed={mode === 'list'} onClick={() => { setMode('list'); localStorage.setItem('fluent-gallery-admin-photo-mode', 'list'); }} className={`rounded-lg p-1.5 ${mode === 'list' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}><List size={18} /></button><button aria-label="网格视图" aria-pressed={mode === 'grid'} onClick={() => { setMode('grid'); localStorage.setItem('fluent-gallery-admin-photo-mode', 'grid'); }} className={`rounded-lg p-1.5 ${mode === 'grid' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}><Grid2X2 size={18} /></button></div><button onClick={() => { setEditing(null); setModal('upload'); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"><ImagePlus size={18} />上传照片</button></div></div>
+    <div className="studio-photo-toolbar flex flex-col gap-4 border border-slate-200 bg-white p-4 xl:flex-row xl:items-center"><div className="relative flex-1"><Search size={18} className="absolute left-3 top-3 text-slate-400" /><input aria-label="搜索照片" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索标题、标签或拍摄地点…" className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm" /></div><div className="flex flex-wrap items-center gap-2"><label className="studio-photo-sort"><span>排序</span><SelectMenu ariaLabel="照片排序" value={sort} onChange={value => { setSort(value); localStorage.setItem('fluent-gallery-admin-photo-sort', value); setPage(1); }} options={[{ value: 'latest', label: '最新上传' }, { value: 'likes', label: '最多点赞' }, { value: 'views', label: '最多浏览' }]} /></label><label className="studio-thumbnail-slider"><span>缩略图</span><input aria-label="调整照片显示大小" type="range" min={THUMBNAIL_MIN} max={THUMBNAIL_MAX} step={THUMBNAIL_STEP} value={thumbnailSize} onChange={event => changeThumbnailSize(Number(event.target.value))} /><output>{thumbnailSize}px</output></label><button aria-expanded={filterOpen} onClick={() => setFilterOpen(value => !value)} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${activeFilters ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-700'}`}><Filter size={17} />筛选{tags.length ? ` (${tags.length})` : ''}</button><div className="inline-flex rounded-xl border border-slate-300 p-1"><button aria-label="列表视图" aria-pressed={mode === 'list'} onClick={() => { setMode('list'); localStorage.setItem('fluent-gallery-admin-photo-mode', 'list'); }} className={`rounded-lg p-1.5 ${mode === 'list' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}><List size={18} /></button><button aria-label="网格视图" aria-pressed={mode === 'grid'} onClick={() => { setMode('grid'); localStorage.setItem('fluent-gallery-admin-photo-mode', 'grid'); }} className={`rounded-lg p-1.5 ${mode === 'grid' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}><Grid2X2 size={18} /></button></div><button onClick={openUpload} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"><ImagePlus size={18} />上传照片</button></div></div>
     {items.length > 0 && <div className="flex items-center justify-between border-y border-slate-200 py-3"><label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" aria-label="全选当前页照片" checked={selectedIds.size === items.length} ref={node => { if (node) node.indeterminate = selectedIds.size > 0 && selectedIds.size < items.length; }} onChange={toggleAll} />全选当前页</label><button onClick={() => setBulkOpen(true)} disabled={selectedIds.size === 0} aria-hidden={selectedIds.size === 0} tabIndex={selectedIds.size === 0 ? -1 : 0} className={`studio-bulk-edit-trigger inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white ${selectedIds.size > 0 ? 'is-visible' : ''}`}><CheckSquare size={16} />批量修改（{selectedIds.size}）</button></div>}
     {selectedIds.size > 0 && <div className="album-bulk"><span>将 {selectedIds.size} 张照片加入画册</span><AlbumSelector value={targetAlbums} onChange={setTargetAlbums} disabled={addingAlbums} /><button disabled={addingAlbums || loading || !targetAlbums.length} onClick={() => void addToAlbums()}>{addingAlbums ? '正在加入…' : '加入所选画册'}</button></div>}
     {albumError && <p role="alert">{albumError}<button onClick={() => setReloadVersion(v => v + 1)}>重试</button></p>}

@@ -1,12 +1,14 @@
+import { getHeroImages, legacyHeroImage } from '../shared/hero';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUpRight, LoaderCircle, RotateCcw } from 'lucide-react';
 import { FilterState, Photo } from '../types';
 import { PhotoCard } from './PhotoCard';
-import { PhotoImage } from './PhotoImage';
 import { Lightbox } from './Lightbox';
 import { GalleryFilters } from './GalleryFilters';
 import type { GallerySettings } from '../api/settingsService';
 import { GalleryFooter } from './GalleryFooter';
+import { HeroArtwork } from './HeroArtwork';
+import { analytics, type InteractionSource } from '../api/analyticsService';
 
 interface MasonryGalleryProps {
   photos: Photo[];
@@ -38,16 +40,18 @@ function shufflePhotos(items: Photo[]): Photo[] {
 
 export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPhotos, hasMore = false, loadingMore = false, configuredHero = null, sharedPhoto = null, sharedPhotoError = null, loading, error, filter, gallerySettings, onFilterChange, onLoadMore, onRetry, onDismissSharedPhotoError, onLightboxClose }) => {
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
-  const [compact, setCompact] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<InteractionSource>('gallery');
+  const [compact, setCompact] = useState(() => window.matchMedia?.('(max-width: 700px)').matches ?? window.innerWidth <= 700);
   const [displayPhotos, setDisplayPhotos] = useState<Photo[]>(photos);
   // Keep the opening artwork stable while visitors explore the collection filters.
   const [featured, setFeatured] = useState<Photo | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    if (configuredHero) { setFeatured(configuredHero); return; }
     if (!loading && !error && filter.tag === null && filter.year === null) {
       setFeatured(current => {
-        const configured = configuredHero ?? (gallerySettings.heroPhotoId ? photos.find(photo => photo.id === gallerySettings.heroPhotoId) : null);
-        return configured ?? photos.find(photo => photo.id === current?.id) ?? photos.find(photo => photo.width >= photo.height) ?? photos[0] ?? null;
+        const configured = configuredHero ?? (gallerySettings.heroImages === undefined && gallerySettings.heroPhotoId ? photos.find(photo => photo.id === gallerySettings.heroPhotoId) : null);
+        return configured ?? current ?? photos.find(photo => photo.width >= photo.height) ?? photos[0] ?? null;
       });
     }
   }, [photos, configuredHero, loading, error, filter.tag, filter.year, gallerySettings.heroPhotoId]);
@@ -56,10 +60,25 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
   }, [photos, filter.tag, filter.year, gallerySettings.randomizePhotos]);
   const selectedPhoto = displayPhotos.find(photo => photo.id === selectedPhotoId) ?? (featured?.id === selectedPhotoId ? featured : null) ?? (sharedPhoto?.id === selectedPhotoId ? sharedPhoto : null);
   const selectedIndex = displayPhotos.findIndex(photo => photo.id === selectedPhotoId);
+  const heroView = getHeroImages(gallerySettings).find(image => image.photoId === featured?.id)
+    ?? legacyHeroImage(gallerySettings, featured?.id || '');
+  const heroPositionX = heroView.fit === 'cover' ? heroView.positionX : 50;
+  const heroPositionY = heroView.fit === 'cover' ? heroView.positionY : 50;
+  const heroImageScale = heroView.fit === 'cover' ? heroView.scale : 1;
 
   useEffect(() => {
-    if (sharedPhoto) setSelectedPhotoId(sharedPhoto.id);
+    if (sharedPhoto) {
+      setSelectedSource('shared_link');
+      setSelectedPhotoId(sharedPhoto.id);
+      analytics.selectContent('photo', sharedPhoto.id, 'shared_link');
+    }
   }, [sharedPhoto]);
+
+  const openPhoto = (photo: Photo, source: InteractionSource, position?: number) => {
+    analytics.selectContent('photo', photo.id, source, { content_position: position });
+    setSelectedSource(source);
+    setSelectedPhotoId(photo.id);
+  };
 
   const sharePhoto = useCallback(async (photo: Photo): Promise<'shared' | 'copied'> => {
     const shareUrl = new URL(window.location.href);
@@ -86,7 +105,7 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
   useEffect(() => {
     if (!hasMore || loading || loadingMore || error || !onLoadMore || !loadMoreRef.current || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) onLoadMore();
+      if (entries.some(entry => entry.isIntersecting)) { analytics.loadMore('automatic'); onLoadMore(); }
     }, { rootMargin: '600px 0px' });
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
@@ -101,34 +120,27 @@ export const MasonryGallery: React.FC<MasonryGalleryProps> = ({ photos, totalPho
           <h1 id="gallery-heading">让光影，<br />继续<span className="gallery-title-accent">流动</span>。</h1>
           <p className="gallery-hero-english">Images in motion.<br /><em>Moments held still.</em></p>
           <p className="gallery-hero-description">光线经过，时间经过，生活也不断向前。<br />Fluent 收集那些自然发生、稍纵即逝的片刻——<br />关于城市、街道、人与日常。</p>
-          <button className="gallery-explore" onClick={() => document.getElementById('collection')?.scrollIntoView({ behavior: 'smooth' })}>循光而行 <span><ArrowDown size={17} strokeWidth={1.3} /></span></button>
+          <button className="gallery-explore" onClick={() => { analytics.navigation('collection', 'hero_cta'); document.getElementById('collection')?.scrollIntoView({ behavior: 'smooth' }); }}>循光而行 <span><ArrowDown size={17} strokeWidth={1.3} /></span></button>
         </div>
-        <div className="gallery-hero-art">
-          <div className="gallery-hero-edition"><span>IN THE FRAME</span><span>{featured?.year ?? '光影之间'}</span></div>
-          <figure>
-            {featured ? <button className={`gallery-featured-frame is-${gallerySettings.heroImageFit}`} onClick={() => setSelectedPhotoId(featured.id)} aria-label={`查看封面作品：${featured.title}`}><PhotoImage key={featured.url} photo={featured} original priority /><span className="gallery-featured-open"><ArrowUpRight size={18} /></span></button> : <div className="gallery-featured-placeholder" aria-label={loading ? '正在准备展览' : '等待第一幅作品'}><span>{loading ? '正在准备展览' : '光影，静待发生。'}</span></div>}
-            <figcaption><span><i aria-hidden="true" />{featured ? featured.title : 'FLUENT GALLERY'}</span><span>{featured?.exif?.author || '光影中的日常'}</span></figcaption>
-          </figure>
-          <span className="gallery-hero-side-note" aria-hidden="true">A MOMENT, KEPT FOREVER.</span>
-        </div>
+        <HeroArtwork photo={featured} fit={heroView.fit} aspectRatio={heroView.aspectRatio} positionX={heroPositionX} positionY={heroPositionY} scale={heroImageScale} loading={loading} onOpen={featured ? () => openPhoto(featured, 'hero') : undefined} />
       </section>
 
       <section id="collection" className="gallery-collection gallery-container" aria-labelledby="collection-heading">
         <div className="gallery-section-heading"><div><p className="gallery-eyebrow">THE COLLECTION</p><h2 id="collection-heading">光影拾集 <span>Selected works</span></h2></div><p className="gallery-count" role="status">{loading ? '正在整理作品…' : error && photos.length === 0 ? '展览暂时未能载入' : <><span>{String(totalPhotos ?? photos.length).padStart(2, '0')}</span> 幅作品 · 每一幅，都是一次停留</>}</p></div>
         <GalleryFilters filter={filter} onFilterChange={onFilterChange} compact={compact} onCompactChange={setCompact} />
         <div className={`gallery-results ${loading && photos.length > 0 ? 'is-updating' : ''}`} aria-busy={loading}>
-          {error && photos.length === 0 ? <div className="gallery-empty" role="alert"><p className="gallery-eyebrow">A LITTLE PAUSE</p><h3>展览暂时未能载入</h3><p>{error}</p><button onClick={onRetry}><RotateCcw size={14} />重新加载</button></div>
+          {error && photos.length === 0 ? <div className="gallery-empty" role="alert"><p className="gallery-eyebrow">A LITTLE PAUSE</p><h3>展览暂时未能载入</h3><p>{error}</p><button onClick={() => { analytics.contentRetry('gallery'); onRetry(); }}><RotateCcw size={14} />重新加载</button></div>
             : loading && photos.length === 0 ? <div className="gallery-grid gallery-skeleton" aria-label="正在加载作品">{[0, 1, 2].map(index => <div key={index} className="gallery-skeleton-item" />)}</div>
-              : photos.length === 0 ? <div className="gallery-empty"><p className="gallery-eyebrow">ROOM FOR SOMETHING NEW</p><h3>{filter.tag || filter.year ? '这一页，暂时留白。' : '等待第一束光。'}</h3><p>{filter.tag || filter.year ? '换一个主题或年份，继续寻找喜欢的瞬间。' : '作品上传后，将在这里慢慢展开。'}</p>{(filter.tag || filter.year) && <button onClick={() => onFilterChange({ year: null, tag: null })}>查看全部作品 <ArrowUpRight size={15} /></button>}</div>
-                : <div className={`gallery-grid ${compact ? 'is-compact' : ''}`}>{displayPhotos.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} onClick={() => setSelectedPhotoId(photo.id)} />)}</div>}
+              : photos.length === 0 ? <div className="gallery-empty"><p className="gallery-eyebrow">ROOM FOR SOMETHING NEW</p><h3>{filter.tag || filter.year ? '这一页，暂时留白。' : '等待第一束光。'}</h3><p>{filter.tag || filter.year ? '换一个主题或年份，继续寻找喜欢的瞬间。' : '作品上传后，将在这里慢慢展开。'}</p>{(filter.tag || filter.year) && <button onClick={() => { analytics.galleryFilter('all', 'all'); onFilterChange({ year: null, tag: null }); }}>查看全部作品 <ArrowUpRight size={15} /></button>}</div>
+                : <div className={`gallery-grid ${compact ? 'is-compact' : ''}`}>{displayPhotos.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} onClick={() => openPhoto(photo, 'gallery', index + 1)} />)}</div>}
         </div>
-        {!loading && photos.length > 0 && hasMore && <div ref={loadMoreRef} className="gallery-load-more"><button type="button" onClick={onLoadMore} disabled={loadingMore}>{loadingMore ? <><LoaderCircle size={15} className="animate-spin" />正在展开更多作品…</> : '继续浏览'}</button>{error && <p role="status">{error}</p>}</div>}
+        {!loading && photos.length > 0 && hasMore && <div ref={loadMoreRef} className="gallery-load-more"><button type="button" onClick={() => { if (error) analytics.contentRetry('load_more'); else analytics.loadMore('button'); onLoadMore?.(); }} disabled={loadingMore}>{loadingMore ? <><LoaderCircle size={15} className="animate-spin" />正在展开更多作品…</> : '继续浏览'}</button>{error && <p role="status">{error}</p>}</div>}
         {!loading && !error && photos.length > 0 && !hasMore && <div className="gallery-endnote"><span /><p>目光停留的地方，故事还在继续。</p><span /></div>}
       </section>
 
       <GalleryFooter />
 
-      {selectedPhoto && <Lightbox photo={selectedPhoto} onShare={sharePhoto} onClose={closeLightbox} onNext={() => { if (selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1) setSelectedPhotoId(displayPhotos[selectedIndex + 1].id); }} onPrev={() => { if (selectedIndex > 0) setSelectedPhotoId(displayPhotos[selectedIndex - 1].id); }} hasNext={selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1} hasPrev={selectedIndex > 0} position={selectedIndex >= 0 ? selectedIndex + 1 : undefined} total={displayPhotos.length} />}
+      {selectedPhoto && <Lightbox photo={selectedPhoto} analyticsSource={selectedSource} onShare={sharePhoto} onClose={closeLightbox} onNext={() => { if (selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1) setSelectedPhotoId(displayPhotos[selectedIndex + 1].id); }} onPrev={() => { if (selectedIndex > 0) setSelectedPhotoId(displayPhotos[selectedIndex - 1].id); }} hasNext={selectedIndex >= 0 && selectedIndex < displayPhotos.length - 1} hasPrev={selectedIndex > 0} position={selectedIndex >= 0 ? selectedIndex + 1 : undefined} total={displayPhotos.length} />}
     </main>
   );
 };

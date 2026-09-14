@@ -3,6 +3,7 @@ import { Grid2X2, LayoutGrid, X } from 'lucide-react';
 import { FilterState } from '../types';
 import { tagService } from '../api/tagService';
 import { SelectMenu } from './SelectMenu';
+import { analytics } from '../api/analyticsService';
 
 interface GalleryFiltersProps {
   filter: FilterState;
@@ -25,15 +26,15 @@ export const GalleryFilters: React.FC<GalleryFiltersProps> = ({ filter, onFilter
   return (
     <div className="gallery-filters">
       <div className="gallery-filter-tags" aria-label="按主题筛选">
-        <button className={filter.tag === null ? 'is-active' : ''} aria-pressed={filter.tag === null} onClick={() => onFilterChange({ tag: null })}>全部作品</button>
-        {tags.map(tag => <button key={tag} className={filter.tag === tag ? 'is-active' : ''} aria-pressed={filter.tag === tag} onClick={() => onFilterChange({ tag })}>{tag}</button>)}
+        <button className={filter.tag === null ? 'is-active' : ''} aria-pressed={filter.tag === null} onClick={() => { analytics.galleryFilter('tag', 'all'); onFilterChange({ tag: null }); }}>全部作品</button>
+        {tags.map(tag => <button key={tag} className={filter.tag === tag ? 'is-active' : ''} aria-pressed={filter.tag === tag} onClick={() => { analytics.galleryFilter('tag', tag); onFilterChange({ tag }); }}>{tag}</button>)}
       </div>
       <div className="gallery-filter-tools">
-        <SelectMenu className="gallery-year" ariaLabel="拍摄年份" value={filter.year ?? ''} onChange={value => onFilterChange({ year: value === '' ? null : Number(value) })} options={[{ value: '', label: '所有年份' }, ...years.map(year => ({ value: year, label: String(year) }))]} />
-        {(filter.year !== null || filter.tag !== null) && <button className="gallery-clear" onClick={() => onFilterChange({ year: null, tag: null })} aria-label="清除所有筛选"><X size={15} /></button>}
+        <SelectMenu className="gallery-year" ariaLabel="拍摄年份" value={filter.year ?? ''} onChange={value => { analytics.galleryFilter('year', value === '' ? 'all' : String(value)); onFilterChange({ year: value === '' ? null : Number(value) }); }} options={[{ value: '', label: '所有年份' }, ...years.map(year => ({ value: year, label: String(year) }))]} />
+        {(filter.year !== null || filter.tag !== null) && <button className="gallery-clear" onClick={() => { analytics.galleryFilter('all', 'all'); onFilterChange({ year: null, tag: null }); }} aria-label="清除所有筛选"><X size={15} /></button>}
         <div className="gallery-layout-toggle" role="group" aria-label="作品布局">
-          <button aria-label="舒展布局" aria-pressed={!compact} onClick={() => onCompactChange(false)}><Grid2X2 size={16} strokeWidth={1.4} /></button>
-          <button aria-label="紧凑布局" aria-pressed={compact} onClick={() => onCompactChange(true)}><LayoutGrid size={16} strokeWidth={1.4} /></button>
+          <button aria-label="舒展布局" aria-pressed={!compact} onClick={() => { analytics.galleryLayout('expanded'); onCompactChange(false); }}><Grid2X2 size={16} strokeWidth={1.4} /></button>
+          <button aria-label="紧凑布局" aria-pressed={compact} onClick={() => { analytics.galleryLayout('compact'); onCompactChange(true); }}><LayoutGrid size={16} strokeWidth={1.4} /></button>
         </div>
       </div>
     </div>

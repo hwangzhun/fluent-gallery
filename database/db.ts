@@ -131,6 +131,23 @@ async function ensurePhotoStorageKeys(): Promise<void> {
   if (rows.length) console.log(`✅ 已回填 ${rows.length} 条照片 Object Key`);
 }
 
+async function ensureImageJobSchema(): Promise<void> {
+  await dbRun(`CREATE TABLE IF NOT EXISTS image_jobs (
+    id TEXT PRIMARY KEY,
+    source_object_key TEXT NOT NULL,
+    source_mime TEXT NOT NULL,
+    metadata TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT,
+    completed_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  await dbRun('CREATE INDEX IF NOT EXISTS idx_image_jobs_status_created_at ON image_jobs(status, created_at)');
+}
+
 /**
  * 初始化数据库（创建表结构）
  */
@@ -162,6 +179,7 @@ export async function initDatabase(): Promise<void> {
           await dbRun('CREATE INDEX IF NOT EXISTS idx_photos_likes_count ON photos(likes_count)');
           await dbRun('CREATE INDEX IF NOT EXISTS idx_photos_views_count ON photos(views_count)');
           await ensurePhotoStorageKeys();
+          await ensureImageJobSchema();
           
           // 确保 photo_likes 表存在
           const photoLikesExists = await new Promise<boolean>((resolve) => {

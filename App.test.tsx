@@ -5,6 +5,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { settingsService } from './api/settingsService';
+import { defaultHeroImage } from './shared/hero';
 import type { Photo } from './types';
 
 const mocks = vi.hoisted(() => ({
@@ -20,7 +22,8 @@ vi.mock('./api/photoService', () => ({
 }));
 vi.mock('./api/settingsService', () => ({
   settingsService: {
-    getGallerySettings: vi.fn().mockResolvedValue({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain' }),
+    getAnalyticsSettings: vi.fn().mockResolvedValue({ enabled: false, measurementId: '' }),
+    getGallerySettings: vi.fn().mockResolvedValue({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain', heroAspectRatio: '4:3', heroImagePositionX: 50, heroImagePositionY: 50, heroImageScale: 1, heroImagePositionPhotoId: null }),
     getSeoSettings: vi.fn().mockResolvedValue({ title: 'Fluent Gallery', description: '', keywords: '', author: '', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '' }),
   },
 }));
@@ -69,4 +72,29 @@ describe('shared photo links', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => expect(window.location.hash).toBe('#/'));
   });
+});
+
+
+it('randomly loads a Hero outside the first page once and keeps it through lightbox navigation', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.8);
+  vi.mocked(settingsService.getGallerySettings).mockResolvedValueOnce({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain', heroAspectRatio: '4:3', heroImagePositionX: 50, heroImagePositionY: 50, heroImageScale: 1, heroImagePositionPhotoId: null, heroImages: [defaultHeroImage('first'), defaultHeroImage('outside')] });
+  window.location.hash = '#/';
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: '查看封面作品：分享的远方' }));
+  expect(await screen.findByRole('dialog', { name: '作品：分享的远方' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '关闭大图' }));
+  expect(screen.getByRole('button', { name: '查看封面作品：分享的远方' })).toBeInTheDocument();
+  expect(mocks.getPhotoById).toHaveBeenCalledExactlyOnceWith('outside');
+  vi.restoreAllMocks();
+});
+
+it('tries another Hero candidate if the selected photo has become unavailable', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0);
+  vi.mocked(settingsService.getGallerySettings).mockResolvedValueOnce({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain', heroAspectRatio: '4:3', heroImagePositionX: 50, heroImagePositionY: 50, heroImageScale: 1, heroImagePositionPhotoId: null, heroImages: [defaultHeroImage('missing'), defaultHeroImage('outside')] });
+  mocks.getPhotoById.mockRejectedValueOnce(new Error('deleted')).mockResolvedValueOnce(outside);
+  window.location.hash = '#/';
+  render(<App />);
+  expect(await screen.findByRole('button', { name: '查看封面作品：分享的远方' })).toBeInTheDocument();
+  expect(mocks.getPhotoById.mock.calls.map(([id]) => id)).toEqual(['missing', 'outside']);
+  vi.restoreAllMocks();
 });

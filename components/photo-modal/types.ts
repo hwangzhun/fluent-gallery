@@ -32,6 +32,14 @@ export interface PhotoUploadData extends PhotoFormData {
   albumBeforePhotoIds?: string[];
 }
 
+export interface QueuedPhotoUpload {
+  kind: 'queued';
+  jobId: string;
+  photoId: string;
+}
+
+export type PhotoUploadResult = Photo | QueuedPhotoUpload;
+
 export type BatchFieldKey =
   | 'albumIds'
   | 'title'
@@ -48,7 +56,7 @@ export type BatchFieldKey =
   | 'exif.province'
   | 'exif.city';
 
-export type BatchUploadStatus = 'pending' | 'uploading' | 'success' | 'failed';
+export type BatchUploadStatus = 'pending' | 'uploading' | 'processing' | 'success' | 'failed';
 export type ExifParseStatus = 'loading' | 'ready';
 export type BatchUploadPhase = 'editing' | 'uploading' | 'results';
 
@@ -62,6 +70,7 @@ export interface PhotoUploadItem {
   uploadStatus: BatchUploadStatus;
   error?: string;
   uploadedPhoto?: Photo;
+  queuedUpload?: QueuedPhotoUpload;
   analysisStatus?: 'loading' | 'ready' | 'failed';
   analysisError?: string;
 }
@@ -71,14 +80,16 @@ export interface BatchUploadResult {
   succeeded: number;
   failed: number;
   photos: Photo[];
+  jobs: QueuedPhotoUpload[];
 }
 
 export interface PhotoModalProps {
   isOpen: boolean;
   mode: 'upload' | 'edit';
+  presentation?: 'modal' | 'workspace';
   photo?: Photo | null;
   onClose: () => void;
-  onUpload?: (data: PhotoUploadData) => Promise<Photo | void>;
+  onUpload?: (data: PhotoUploadData) => Promise<PhotoUploadResult | void>;
   onUploadBatchComplete?: (result: BatchUploadResult) => void | Promise<void>;
   onUpdate?: (id: string, data: PhotoFormData) => Promise<void>;
 }

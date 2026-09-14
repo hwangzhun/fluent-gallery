@@ -5,14 +5,21 @@ export interface AiPhotoMetadata {
   tags: string[];
 }
 
+async function readAiResult<T>(response: Response, fallback: string): Promise<T> {
+  const result = await response.json().catch(() => null) as { success?: boolean; data?: T; error?: string } | null;
+  if (!response.ok || !result?.success || result.data === undefined) {
+    const invalidResponse = `AI 服务返回了无效响应（HTTP ${response.status}）`;
+    throw new Error(result?.error || (response.ok ? fallback : invalidResponse));
+  }
+  return result.data;
+}
+
 export const aiService = {
   async suggestTags(file: File): Promise<string[]> {
     const body = new FormData();
     body.append('file', file);
     const response = await apiFetch('/ai/tags', { method: 'POST', body });
-    const result = await response.json();
-    if (!response.ok || !result.success) throw new Error(result.error || 'AI 自动打标签失败');
-    return result.data.tags;
+    return (await readAiResult<{ tags: string[] }>(response, 'AI 自动打标签失败')).tags;
   },
 
   async suggestTagsForPhoto(photoId: string): Promise<string[]> {
@@ -21,18 +28,14 @@ export const aiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ photoId }),
     });
-    const result = await response.json();
-    if (!response.ok || !result.success) throw new Error(result.error || 'AI 自动打标签失败');
-    return result.data.tags;
+    return (await readAiResult<{ tags: string[] }>(response, 'AI 自动打标签失败')).tags;
   },
 
   async suggestMetadata(file: File): Promise<AiPhotoMetadata> {
     const body = new FormData();
     body.append('file', file);
     const response = await apiFetch('/ai/metadata', { method: 'POST', body });
-    const result = await response.json();
-    if (!response.ok || !result.success) throw new Error(result.error || 'AI 照片信息生成失败');
-    return result.data;
+    return readAiResult<AiPhotoMetadata>(response, 'AI 照片信息生成失败');
   },
 
   async suggestMetadataForPhoto(photoId: string): Promise<AiPhotoMetadata> {
@@ -41,8 +44,6 @@ export const aiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ photoId }),
     });
-    const result = await response.json();
-    if (!response.ok || !result.success) throw new Error(result.error || 'AI 照片信息生成失败');
-    return result.data;
+    return readAiResult<AiPhotoMetadata>(response, 'AI 照片信息生成失败');
   },
 };

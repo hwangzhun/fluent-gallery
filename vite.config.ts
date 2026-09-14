@@ -13,6 +13,14 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
+    proxy: {
+      // The frontend source also lives under /api/*.ts. Restrict the dev
+      // proxy to runtime API requests so Vite can still serve those modules.
+      '^/api/(?!.*\\.ts(?:\\?|$))': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [react(), tailwindcss()],
   resolve: {

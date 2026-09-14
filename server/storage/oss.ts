@@ -3,7 +3,7 @@
  */
 import OSS from 'ali-oss';
 import COS from 'cos-nodejs-sdk-v5';
-import { loadStorageConfig, OSSConfig, OSSProvider } from './config';
+import { loadStorageConfig, OSSConfig, OSSProvider, StorageConfig } from './config';
 
 // 统一的客户端类型
 export type OSSClient = OSS | COS;
@@ -267,6 +267,68 @@ export async function putTencentProcessedImages(
   }
 }
 
+/**
+ * Tencent COS can process an existing object with a server-side copy. This
+ * avoids downloading a browser-direct upload to the application server merely
+ * to submit it back to COS for CI processing.
+ */
+export async function putTencentProcessedObject(
+  client: OSSClient,
+  sourcePath: string,
+  config: OSSConfig,
+): Promise<TencentProcessedImages> {
+  const cosClient = client as COS;
+  const publicUrl = normalizePublicUrl(config.publicUrl);
+  const displayPath = generateFilePath('image.avif', 'photos', config.uploadDir);
+  const thumbnailPath = generateFilePath('image.avif', 'thumbs', config.uploadDir);
+  const paths = [displayPath, thumbnailPath];
+  const picOperations = JSON.stringify({
+    is_pic_info: 1,
+    rules: [
+      { fileid: `/${displayPath}`, rule: 'imageMogr2/auto-orient/thumbnail/2560x2560>/format/avif/quality/80!' },
+      { fileid: `/${thumbnailPath}`, rule: 'imageMogr2/auto-orient/thumbnail/720x720>/format/avif/quality/74!' },
+    ],
+  });
+  const encodedSource = sourcePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  try {
+    const data: any = await new Promise((resolve, reject) => cosClient.putObjectCopy({
+      Bucket: config.bucket,
+      Region: config.region,
+      Key: displayPath,
+      CopySource: `${config.bucket}.cos.${config.region}.myqcloud.com/${encodedSource}`,
+      ACL: 'public-read',
+      PicOperations: picOperations,
+    } as any, (error: any, result: unknown) => error ? reject(error) : resolve(result)));
+    const objects = processObjects(data);
+    const byKey = (key: string) => objects.find(object => (object.Key || '').replace(/^\/+/, '') === key);
+    const display = byKey(displayPath);
+    const thumbnail = byKey(thumbnailPath);
+    if (!display || !thumbnail || display.Format?.toLowerCase() !== 'avif' || thumbnail.Format?.toLowerCase() !== 'avif') {
+      throw new Error('腾讯云未返回完整的 AVIF 处理结果');
+    }
+    const width = Number(display.Width);
+    const height = Number(display.Height);
+    const displayBytes = Number(display.Size);
+    const thumbnailBytes = Number(thumbnail.Size);
+    if (![width, height, displayBytes, thumbnailBytes].every(Number.isFinite) || width <= 0 || height <= 0 || displayBytes <= 0 || thumbnailBytes <= 0) {
+      throw new Error('腾讯云返回的图片信息不完整');
+    }
+    return {
+      url: locationUrl(display.Location || data.Location || '', displayPath, publicUrl),
+      thumbnailUrl: locationUrl(thumbnail.Location || '', thumbnailPath, publicUrl),
+      objectKey: displayPath,
+      thumbnailObjectKey: thumbnailPath,
+      width,
+      height,
+      displayBytes,
+      thumbnailBytes,
+    };
+  } catch (error) {
+    await deleteTencentObjects(cosClient, config.bucket, config.region, paths);
+    throw error;
+  }
+}
+
 export async function validateTencentPublicUrl(client: OSSClient, config: OSSConfig): Promise<string> {
   const cosClient = client as COS;
   const publicUrl = normalizePublicUrl(config.publicUrl);
@@ -344,6 +406,25 @@ export async function putOSSFile(
     });
     return { url: result.url, objectKey: path };
   }
+}
+
+/** Verify that a browser-direct upload reached the configured bucket. */
+export async function assertOSSFileExists(
+  path: string,
+  override?: { config: StorageConfig; client: OSSClient },
+): Promise<void> {
+  const config = override?.config || await loadStorageConfig();
+  if (config.mode !== 'oss' || !config.oss) throw new Error('OSS 配置不存在');
+  const client = override?.client || await getOSSClient();
+  if ((config.oss.provider || 'aliyun') === 'tencent') {
+    await new Promise<void>((resolve, reject) => (client as COS).headObject({
+      Bucket: config.oss!.bucket,
+      Region: config.oss!.region,
+      Key: path,
+    }, error => error ? reject(error) : resolve()));
+    return;
+  }
+  await (client as OSS).head(path);
 }
 
 /**

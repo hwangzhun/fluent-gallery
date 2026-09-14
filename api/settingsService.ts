@@ -1,6 +1,7 @@
 /**
  * 设置服务（前端）
  */
+import type { HeroAspectRatio, HeroImageSettings } from '../shared/hero';
 import { API_BASE_URL, apiFetch } from './config';
 
 interface ApiResponse<T> {
@@ -41,7 +42,15 @@ export interface GallerySettings {
   randomizePhotos: boolean;
   heroPhotoId: string | null;
   heroImageFit: 'contain' | 'cover';
+  heroAspectRatio: HeroAspectRatio;
+  heroImages?: HeroImageSettings[];
+  heroImagePositionX: number;
+  heroImagePositionY: number;
+  heroImageScale: number;
+  heroImagePositionPhotoId: string | null;
 }
+
+export interface AuthorSettings { author: string; copyright: string; }
 
 export interface SeoSettings {
   title: string; description: string; keywords: string; author: string;
@@ -49,6 +58,7 @@ export interface SeoSettings {
 }
 
 export interface AiSettings { baseUrl: string; model: string; apiKey?: string; hasApiKey: boolean; }
+export interface AnalyticsSettings { enabled: boolean; measurementId: string; }
 
 class SettingsService {
   /**
@@ -210,6 +220,19 @@ class SettingsService {
     }
   }
 
+  async getAuthorSettings(): Promise<AuthorSettings> {
+    const response = await apiFetch('/settings/author');
+    const result: ApiResponse<AuthorSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '获取作者信息失败');
+    return result.data;
+  }
+
+  async updateAuthorSettings(settings: AuthorSettings): Promise<void> {
+    const response = await apiFetch('/settings/author', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+    const result: ApiResponse<AuthorSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '保存作者信息失败');
+  }
+
   async getSeoSettings(): Promise<SeoSettings> {
     const response = await fetch(`${API_BASE_URL}/settings/seo`);
     const result: ApiResponse<SeoSettings> = await response.json();
@@ -221,6 +244,19 @@ class SettingsService {
     const response = await apiFetch('/settings/seo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
     const result: ApiResponse<SeoSettings> = await response.json();
     if (!response.ok || !result.success) throw new Error(result.error || '保存 SEO 设置失败');
+  }
+
+  async getAnalyticsSettings(): Promise<AnalyticsSettings> {
+    const response = await fetch(`${API_BASE_URL}/settings/analytics`);
+    const result: ApiResponse<AnalyticsSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '获取数据统计设置失败');
+    return result.data;
+  }
+
+  async updateAnalyticsSettings(settings: AnalyticsSettings): Promise<void> {
+    const response = await apiFetch('/settings/analytics', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+    const result: ApiResponse<AnalyticsSettings> = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error || '保存数据统计设置失败');
   }
 
   async getAiSettings(): Promise<AiSettings> {

@@ -3,6 +3,7 @@ import { ArrowUpRight, Heart } from 'lucide-react';
 import { Photo } from '../types';
 import { likeService } from '../api';
 import { PhotoImage } from './PhotoImage';
+import { analytics } from '../api/analyticsService';
 
 interface PhotoCardProps {
   photo: Photo;
@@ -34,6 +35,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({ photo, index, onClick }) =
       const result = await likeService.likePhoto(photo.id);
       setLikes(result.likesCount);
       setLiked(result.liked);
+      if (result.created) analytics.photoLike(photo.id, 'gallery');
     } catch {
       setLikes(likes);
       setLiked(false);

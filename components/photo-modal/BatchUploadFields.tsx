@@ -35,7 +35,7 @@ export function BatchEmptyPicker({ onFileSelect, onDrop }: FilePickerProps) {
     <section
       onDrop={onDrop}
       onDragOver={(event) => event.preventDefault()}
-      className="relative grid min-h-[320px] flex-1 place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 py-10 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40"
+      className="batch-empty-picker relative grid min-h-[320px] flex-1 place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 py-10 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40"
     >
       <input type="file" accept={ACCEPTED_IMAGE_TYPES} multiple onChange={onFileSelect} aria-label="选择要上传的照片" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
       <div className="pointer-events-none max-w-sm">
@@ -50,6 +50,7 @@ export function BatchEmptyPicker({ onFileSelect, onDrop }: FilePickerProps) {
 
 function StatusDot({ item }: { item: PhotoUploadItem }) {
   if (item.uploadStatus === 'uploading') return <span title="上传中" className="grid h-5 w-5 place-items-center rounded-full bg-blue-600 text-white"><LoaderCircle size={12} className="animate-spin" /></span>;
+  if (item.uploadStatus === 'processing') return <span title="后台处理中" className="grid h-5 w-5 place-items-center rounded-full bg-amber-500 text-white"><LoaderCircle size={12} className="animate-spin" /></span>;
   if (item.uploadStatus === 'success') return <span title="已完成" className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white"><CheckCircle2 size={12} /></span>;
   if (item.uploadStatus === 'failed') return <span title="上传失败" className="grid h-5 w-5 place-items-center rounded-full bg-red-500 text-white"><AlertCircle size={12} /></span>;
   if (item.exifStatus === 'loading') return <span title="正在读取照片信息" className="grid h-5 w-5 place-items-center rounded-full bg-slate-700/80 text-white"><LoaderCircle size={12} className="animate-spin" /></span>;
@@ -58,6 +59,7 @@ function StatusDot({ item }: { item: PhotoUploadItem }) {
 
 function UploadStatus({ item }: { item: PhotoUploadItem }) {
   if (item.uploadStatus === 'uploading') return <span className="inline-flex items-center gap-1.5 text-blue-600"><LoaderCircle size={13} className="animate-spin" />上传中</span>;
+  if (item.uploadStatus === 'processing') return <span className="inline-flex items-center gap-1.5 text-amber-600"><LoaderCircle size={13} className="animate-spin" />后台处理中</span>;
   if (item.uploadStatus === 'success') return <span className="inline-flex items-center gap-1.5 text-emerald-600"><CheckCircle2 size={13} />已完成</span>;
   if (item.uploadStatus === 'failed') return <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={13} />失败</span>;
   if (item.analysisStatus === 'loading') return <span className="inline-flex items-center gap-1.5 text-violet-600"><LoaderCircle size={13} className="animate-spin" />AI 分析中</span>;
@@ -109,7 +111,7 @@ function BatchQueue({ items, activeId, phase, onSelect, onRemove, onFileSelect }
   };
 
   return (
-    <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-5">
+    <div className="batch-queue border-b border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-5">
       <div className="mb-2.5 flex items-center justify-between gap-3">
         <p aria-label={`照片数量：${items.length}`} className="text-xs font-medium text-slate-500">照片 <span className="font-semibold text-slate-800">{items.length}</span> / {MAX_BATCH_FILES}</p>
         <p className="hidden text-xs text-slate-400 sm:block">选择缩略图编辑对应照片</p>
@@ -127,7 +129,7 @@ function BatchQueue({ items, activeId, phase, onSelect, onRemove, onFileSelect }
 
         <div ref={stripRef} onScroll={updateScrollState} className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto px-0.5 py-1">
           {items.map((item, index) => (
-            <div key={item.id} className="group relative h-[68px] w-[68px] shrink-0">
+            <div key={item.id} className="batch-queue-item group relative h-[68px] w-[68px] shrink-0">
             <button
               type="button"
               onClick={() => onSelect(item.id)}
@@ -145,7 +147,7 @@ function BatchQueue({ items, activeId, phase, onSelect, onRemove, onFileSelect }
           </div>
           ))}
           {phase === 'editing' && items.length < MAX_BATCH_FILES && (
-            <label className="relative grid h-[68px] w-[68px] shrink-0 cursor-pointer place-items-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600">
+            <label className="batch-queue-add relative grid h-[68px] w-[68px] shrink-0 cursor-pointer place-items-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600">
               <span className="flex flex-col items-center gap-0.5 text-[10px] font-medium"><Plus size={18} />添加</span>
               <input type="file" accept={ACCEPTED_IMAGE_TYPES} multiple onChange={onFileSelect} aria-label="继续添加照片" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
             </label>
@@ -192,10 +194,10 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
   };
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="batch-workspace relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <BatchQueue items={items} activeId={activeItem.id} phase={phase} onSelect={onSelect} onRemove={onRemove} onFileSelect={onFileSelect} />
-      <div className="no-scrollbar grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] md:overflow-hidden">
-        <section className="studio-upload-preview relative flex min-h-[220px] items-center justify-center overflow-hidden bg-slate-950 md:min-h-0">
+      <div className="batch-editor no-scrollbar grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] md:overflow-hidden">
+        <section className="batch-preview studio-upload-preview relative flex min-h-[220px] items-center justify-center overflow-hidden bg-slate-950 md:min-h-0">
           <UploadPreview item={activeItem} className="relative h-full max-h-full w-full object-contain" />
           <div className="studio-upload-caption flex items-end justify-between gap-4 px-4 py-4 text-white">
             <div className="min-w-0"><p className="truncate text-sm font-medium">{activeItem.file.name}</p><p className="mt-0.5 text-xs text-white/65">第 {activeIndex + 1} 张，共 {items.length} 张</p></div>
@@ -205,9 +207,9 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
             </div>
           </div>
         </section>
-        <section className="flex flex-col border-t border-slate-200 bg-white md:min-h-0 md:border-l md:border-t-0">
-          <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 sm:px-5">
-            <div className="flex" role="tablist" aria-label="照片信息">
+        <section className="batch-inspector flex flex-col border-t border-slate-200 bg-white md:min-h-0 md:border-l md:border-t-0">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-slate-200 px-4 sm:px-5">
+            <div className="flex shrink-0" role="tablist" aria-label="照片信息">
               <button type="button" role="tab" aria-selected={panel === 'basic'} onClick={() => setPanel('basic')} className={`inline-flex h-12 items-center gap-2 border-b-2 px-1 text-sm font-medium ${panel === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><SlidersHorizontal size={15} />基本信息</button>
               <button type="button" role="tab" aria-selected={panel === 'details'} onClick={() => setPanel('details')} className={`ml-6 inline-flex h-12 items-center gap-2 border-b-2 px-1 text-sm font-medium ${panel === 'details' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Info size={15} />拍摄信息</button>
             </div>
@@ -231,14 +233,14 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
   );
 }
 
-interface BatchResultsProps { items: PhotoUploadItem[]; successCount: number; failedCount: number; }
+interface BatchResultsProps { items: PhotoUploadItem[]; successCount: number; processingCount: number; failedCount: number; }
 
-export function BatchResults({ items, successCount, failedCount }: BatchResultsProps) {
+export function BatchResults({ items, successCount, processingCount, failedCount }: BatchResultsProps) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <section className="batch-results flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className={`flex shrink-0 items-center gap-3 border-b px-5 py-4 ${failedCount ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
         <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${failedCount ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>{failedCount ? <AlertCircle size={21} /> : <CheckCircle2 size={21} />}</div>
-        <div><h3 className="text-sm font-semibold text-slate-900">批量上传完成</h3><p className="mt-0.5 text-sm text-slate-600">成功 {successCount} 张{failedCount ? `，失败 ${failedCount} 张` : ''}</p></div>
+        <div><h3 className="text-sm font-semibold text-slate-900">{processingCount ? '已提交后台处理' : '批量上传完成'}</h3><p className="mt-0.5 text-sm text-slate-600">{processingCount ? `已完成 ${successCount} 张，处理中 ${processingCount} 张` : `成功 ${successCount} 张`}{failedCount ? `，失败 ${failedCount} 张` : ''}</p></div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

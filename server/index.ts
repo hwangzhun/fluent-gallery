@@ -17,6 +17,7 @@ import { join } from 'path';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import aiRoutes from './routes/ai';
 import { installFileLogger, requestLogger } from './logger';
+import { startImageJobWorker, stopImageJobWorker } from './imageJobs';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -77,7 +78,7 @@ async function renderIndexHtml() {
   const indexPath = join(process.cwd(), 'dist', 'index.html');
   let html = readFileSync(indexPath, 'utf8');
   const row = await (await import('../database/db')).dbGet<{ value: string }>("SELECT value FROM settings WHERE key = 'seo_config'");
-  const defaults = { title: 'Fluent Gallery | Hwangzhun 摄影作品集', description: 'Fluent Gallery 是 Hwangzhun 的个人摄影画廊，记录光影、城市、自然与日常片刻。', keywords: 'Fluent Gallery, Hwangzhun, 摄影, 摄影作品集, 个人画廊, 光影, 城市摄影', author: 'Hwangzhun', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '' };
+  const defaults = { title: 'Fluent Gallery | 摄影作品集', description: 'Fluent Gallery 是一个记录光影、城市、自然与日常片刻的摄影画廊。', keywords: 'Fluent Gallery, 摄影, 摄影作品集, 在线画廊, 光影, 城市摄影', author: 'Fluent Gallery', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '' };
   let seo = defaults;
   try { seo = { ...defaults, ...(row ? JSON.parse(row.value) : {}) }; } catch { /* use defaults */ }
   const replace = (pattern: RegExp, value: string) => html = html.replace(pattern, value);
@@ -127,6 +128,7 @@ async function startServer() {
     await refreshStorageConfig();
     const migratedLocalUrls = await migrateLegacyLocalPhotoUrls(storageConfig);
     if (migratedLocalUrls) console.log(`✅ 已迁移 ${migratedLocalUrls} 条旧版本地照片 URL`);
+    await startImageJobWorker();
 
     // 启动服务器
     app.listen(PORT, () => {
@@ -149,6 +151,7 @@ async function shutdown(signal: NodeJS.Signals) {
   shuttingDown = true;
   console.log(`\n收到 ${signal}，正在关闭服务器...`);
   try {
+    await stopImageJobWorker();
     const { closeDatabase } = await import('../database/db');
     await closeDatabase();
     process.exit(0);

@@ -22,6 +22,22 @@ CREATE TABLE IF NOT EXISTS photos (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))   -- 更新时间
 );
 
+-- 上传到对象存储后的后台图片处理任务。原始文件只短暂存放在 incoming/ 中。
+CREATE TABLE IF NOT EXISTS image_jobs (
+    id TEXT PRIMARY KEY,
+    source_object_key TEXT NOT NULL,
+    source_mime TEXT NOT NULL,
+    metadata TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT,
+    completed_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_image_jobs_status_created_at ON image_jobs(status, created_at);
+
 -- 索引：优化查询性能
 CREATE INDEX IF NOT EXISTS idx_photos_year ON photos(year);              -- 按年份筛选
 CREATE INDEX IF NOT EXISTS idx_photos_created_at ON photos(created_at); -- 按创建时间排序

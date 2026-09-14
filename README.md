@@ -1,127 +1,130 @@
-# Fluent Gallery
+<p align="center">
+  <img src="./logo/brand.svg" width="300" alt="Fluent Gallery 品牌标志" />
+</p>
 
-一个面向摄影作品展示的全栈画廊应用，包含响应式瀑布流、照片筛选与详情、点赞和浏览统计，以及带登录保护的管理后台。
+<h3 align="center">让光影，继续流动。</h3>
 
-## 功能
+<p align="center">
+  一座安静、自然、属于摄影者自己的线上画廊。<br />
+  用作品集陈列片刻，用画册讲述完整的故事。
+</p>
 
-- 响应式摄影画廊、灯箱预览、年份与标签筛选
-- 照片上传、批量编辑、EXIF 读取和缩略图处理
-- 点赞、浏览量与展示设置
-- 管理后台、会话登录和密码修改
-- SQLite 数据库
-- 本地文件、阿里云 OSS 或腾讯云 COS 存储
+> Fluent Gallery 是一个可自行部署的摄影作品展示与管理工具。它更像一本可以慢慢翻阅的摄影书，而不是堆满按钮的网盘或后台系统。
 
-## 技术栈
+![Fluent Gallery 首页、封面作品与瀑布流作品集](./docs/images/gallery-home.webp)
 
-- React 19、TypeScript、Vite 6、Tailwind CSS 4
-- Express、SQLite、Sharp
-- Vitest、Testing Library、Supertest
+_截图中的摄影作品为非个人演示内容。_
 
-## 本地运行
+## Fluent Gallery 是什么
 
-前置要求：Node.js 20.6+ 和 npm。
+照片不只是一张文件，也可以是一段时间、一处光线，或一次值得停留的观看。
+
+Fluent Gallery 希望为这些照片留出足够的空间。访客打开画廊时，首先看到的是一幅封面作品和一段简短的引导；继续向下，作品以疏朗的瀑布流展开。摄影者则可以在独立的“工作室”里上传照片、整理标签、编排画册，并决定画廊最终呈现的节奏。
+
+它适合：
+
+- 希望拥有个人摄影主页的摄影爱好者；
+- 想按主题、年份或系列整理长期作品的人；
+- 在意图片归属，希望自行保管照片和数据的用户；
+- 喜欢简洁、克制、摄影书式浏览体验的人。
+
+## 你可以用它做什么
+
+| 体验 | 说明 |
+| --- | --- |
+| 浏览作品集 | 响应式瀑布流会适应电脑和手机，也可切换舒展或紧凑布局。 |
+| 寻找照片 | 按主题标签或拍摄年份筛选，快速回到某一段时间或一个系列。 |
+| 沉浸观看 | 点击作品进入大图模式，支持方向键、按钮和手机滑动切换。 |
+| 了解画面 | 展示标题、描述、作者、地点、相机、镜头和曝光信息。 |
+| 表达与分享 | 访客可以点赞、查看浏览量，并通过系统分享或复制链接。 |
+| 阅读画册 | 将一组照片按指定顺序编成画册，设置封面、简介与发布状态。 |
+| 管理收藏 | 批量上传、搜索、筛选、修改标签与拍摄信息，并查看互动数据。 |
+
+![Fluent Gallery 作品大图、拍摄信息与分享入口](./docs/images/photo-lightbox.webp)
+
+## 快速开始
+
+最省心的方式是使用 Docker。请先安装 [Docker](https://docs.docker.com/get-docker/) 与 Docker Compose，然后执行：
 
 ```bash
 git clone https://github.com/hwangzhun/fluent-gallery.git
 cd fluent-gallery
-npm install
-cp .env.example .env
-npm run dev
+docker compose up -d --build
 ```
 
 启动后访问：
 
-- 图库：<http://localhost:3000>
-- 管理后台：<http://localhost:3000/#/admin>
-- API 健康检查：<http://localhost:3001/health>
+- 画廊：<http://localhost:3000>
+- 工作室：<http://localhost:3000/#/admin>
 
-首次运行的管理员密码是 `admin123`。登录后请立即在“设置 → 安全”中修改。
+首次登录密码为 `admin123`。进入工作室后，请立即前往“系统设置 → 安全”修改密码。
 
-## 环境变量
+> Docker 默认只监听本机地址。如果要让画廊通过公网域名访问，请在它前面配置反向代理与 HTTPS。
 
-将 [`.env.example`](.env.example) 复制为 `.env` 后按需修改。常用配置如下：
+当前版本为 **1.0.4**。如果希望在本地开发或参与项目，需要 Node.js 20.6+；相关配置可参考 [`.env.example`](./.env.example)。
 
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `PORT` | `3001` | API 服务端口 |
-| `CORS_ORIGIN` | `http://localhost:3000` | 本地开发的跨域前端来源；Docker 同源部署无需配置 |
-| `GALLERY_DB_PATH` | `./data/gallery.db` | SQLite 数据库路径 |
-| `HOST_PORT` | `3000` | Docker 仅在宿主机回环地址暴露的端口 |
-| `LOCAL_UPLOAD_DIR` | `./uploads` | 本地照片存储目录 |
-| `LOCAL_PUBLIC_URL` | `http://localhost:3001/uploads` | 本地开发的照片公开地址；Docker 默认使用同源 `/uploads` |
-| `VITE_API_BASE_URL` | `http://localhost:3001/api` | 前端 API 地址；Docker 构建时固定为同源 `/api` |
+## 第一次使用
 
-存储服务统一在管理后台“设置 → 存储”中配置，包括本地目录、公开地址、对象存储密钥和腾讯云图片处理。AI 接口地址、模型和密钥在“设置 → API 设置”中配置。这些设置保存在数据库中，无需填写到 `.env`。首次未配置存储时默认使用本地存储。
+1. 打开 `/#/admin` 进入工作室，先修改默认管理员密码。
+2. 在“照片管理”中上传一张或一批照片。系统会读取可用的 EXIF 信息，并生成适合网页浏览的展示图与缩略图。
+3. 为照片补充标题、描述、年份和标签；需要时也可以修改作者、地点、相机与曝光信息。
+4. 在“系统设置 → 常规”中选择首页封面作品，调整画面比例、位置和缩放。
+5. 在“画册管理”中新建画册、选片、排列顺序并指定封面，准备好后再发布到前台。
+6. 回到公开画廊检查最终效果，然后把画廊或单幅作品链接分享给朋友。
 
-## 常用命令
-
-```bash
-npm run dev          # 同时启动前端与 API 服务
-npm run dev:client   # 仅启动前端
-npm run dev:server   # 仅启动 API 服务
-npm run dev:full     # npm run dev 的兼容别名
-npm test             # 运行测试
-npm run build        # 构建前端
-npm run preview      # 预览前端构建结果
+```mermaid
+flowchart LR
+    A[上传照片] --> B[整理标题、标签与拍摄信息]
+    B --> C[设置封面或编排画册]
+    C --> D[发布到画廊]
+    D --> E[访客浏览、点赞与分享]
 ```
 
-## 项目结构
+![Fluent Gallery 工作室中的照片管理界面](./docs/images/studio.webp)
 
-```text
-components/          React 组件与管理后台
-database/            数据库初始化、迁移与 DAO
-public/              前端静态资源
-server/              Express API、鉴权和存储适配
-api/            前端 API 服务
-data/                本地 SQLite 数据（不会提交）
-uploads/             本地上传文件（不会提交）
-```
+## 让画廊更像你
 
-数据库设计见 [`database/README.md`](database/README.md)，API 概览见 [`server/README.md`](server/README.md)。
+- **首页封面**：选择一幅或多幅 Hero 作品，并分别调整裁切、比例、位置和缩放。
+- **展示节奏**：首页作品可以按时间排列，也可以在每次访问时随机展开；筛选结果仍保持稳定顺序。
+- **作者与版权**：为新上传的照片预设作者和版权信息，仍可逐张修改。
+- **AI 辅助整理**：连接兼容 OpenAI 格式的视觉接口后，可为照片生成中文标题与标签；这项能力完全可选。
+- **被发现与被理解**：可配置 SEO 信息，也可以选择接入 Google Analytics 4 了解公开画廊的访问情况。
+- **照片放在哪里**：默认保存在本机，也支持阿里云 OSS 和腾讯云 COS；存储密钥只由服务端保存。
 
-## Docker 部署
+工作室还提供照片搜索、年份与标签筛选、列表/网格视图、批量修改、批量归册、画册排序、标签管理和运行日志。日常整理不需要接触数据库或配置文件。
 
-生产镜像将 Vite 前端和 Express API 放在同一容器内，浏览器统一通过同一域名访问页面、`/api`、`/uploads` 和 `/health`。
+## 数据与备份
 
-```bash
-docker compose up -d --build
-docker compose ps
-curl http://127.0.0.1:3000/health
-```
+使用默认 Docker 配置时，重建或更新容器不会清空画廊内容：
 
-Docker 部署不需要 `.env` 或任何存储配置。Compose 只监听 `127.0.0.1:${HOST_PORT:-3000}`，不直接向公网暴露。首次启动会在 `data/gallery.db` 自动创建空数据库，并默认使用宿主机 `uploads` 目录保存照片。入口点会修复绑定挂载的运行目录权限，再以非 root 用户运行服务。已有本地图库首次以 Docker 启动时，会自动将旧的 `localhost:3001/uploads` 照片地址迁移为当前公开地址。`data`、`uploads` 和 `logs` 都持久化在宿主机，重建镜像不会删除它们。SQLite 只允许运行一个 `gallery` 容器副本，不要横向扩容。
+| 目录 | 保存内容 |
+| --- | --- |
+| `data/` | SQLite 数据库，包括照片信息、标签、画册和设置。 |
+| `uploads/` | 使用本地存储时的展示图与缩略图。 |
+| `logs/` | 运行日志，便于排查问题。 |
 
-Nginx 反向代理示例：
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    client_max_body_size 64m;
-}
-```
-
-应用默认使用本地照片存储，路径为 `/app/uploads`，公开地址为同源 `/uploads`。生产环境使用 `Secure` 管理员 Cookie，因此对外域名必须启用 HTTPS。
-
-### 备份与恢复
-
-为保证 SQLite 备份一致，复制数据前先停止容器：
+备份前建议先暂停服务，复制数据库和本地照片后再启动：
 
 ```bash
 docker compose stop gallery
-mkdir -p backups
-cp data/gallery.db backups/gallery-$(date +%Y%m%d-%H%M%S).db
+mkdir -p backups/$(date +%Y%m%d)
+cp -a data uploads backups/$(date +%Y%m%d)/
 docker compose start gallery
 ```
 
-恢复时先停止容器，将选定的备份复制为 `data/gallery.db`，再启动容器。如果使用本地照片存储，备份时还应同时备份 `uploads/`。`.env`、数据库、照片和日志均被 `.dockerignore` 排除，不会进入镜像层。
+如果照片保存在 OSS 或 COS，还应根据对应服务商的方式备份 Bucket。恢复时请先停止服务，再还原同一份数据库与照片文件，避免记录和图片不一致。
 
-### 画册
+## 它如何工作
 
-前台标题栏“画册”进入 `/#/albums`，以照片堆叠卡片展示已发布的非空画册，点击后按册内顺序打开大图。画册顺序不受首页随机展示设置影响。
+Fluent Gallery 把公开画廊、工作室和 API 放在同一个服务中。SQLite 保存照片信息、标签、画册与设置；图片可以保存在服务器本地，也可以放在 OSS 或 COS。上传时系统会准备较轻的展示图与缩略图，让访客浏览更顺畅，同时避免把管理入口暴露给普通访客。
 
-后台“画册管理”支持草稿、发布、简介、选片、封面及顺序编排。照片可以加入多个画册；删除画册仅解除关联。照片管理可按画册筛选、批量加入画册，并在编辑或上传时选择所属画册。上传的“画册”公共开关遵循现有公共字段规则：打开后再次修改选择，才会同步当前批次。
+想进一步了解内部结构，可以查看：
 
-数据库启动时自动增量创建 `albums`、`album_photos` 及索引，已有照片和统计不会重建。发布状态只控制画册可见性，画册中的照片仍属于公开作品集。
+- [服务端与 API 概览](./server/README.md)
+- [数据库结构说明](./database/README.md)
+
+---
+
+<p align="center">
+  <em>Images in motion. Moments held still.</em>
+</p>

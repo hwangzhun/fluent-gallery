@@ -2,14 +2,16 @@ import { AlbumInputError } from '../../database/dao/albumDao';
 import express from 'express';
 import multer from 'multer';
 import { PhotoDao } from '../../database/dao/photoDao';
-import type { CreatePhotoInput, UpdatePhotoInput } from '../../database/types';
+import type { CreatePhotoInput, ExifInfo, UpdatePhotoInput } from '../../database/types';
 import { deleteFile } from '../storage';
 import { requireAdmin } from '../auth';
 import { processUploadedImage } from '../imageProcessing';
 import { storeProcessedImages } from '../storage/processed';
 import { dbGet, dbRun } from '../../database/db';
 import { loadStorageConfig } from '../storage/config';
-import { getOSSClient, putTencentProcessedImages, TENCENT_CI_MAX_FILE_SIZE } from '../storage/oss';
+import { assertOSSFileExists, getOSSClient, putTencentProcessedImages, TENCENT_CI_MAX_FILE_SIZE } from '../storage/oss';
+import { generateFilePath, normalizeUploadDir } from '../storage/oss';
+import { enqueueImageJob, getImageJobStatuses, type ImageJobMetadata } from '../imageJobs';
 
 const router = express.Router();
 const photoDao = new PhotoDao();
@@ -57,6 +59,91 @@ function receivePhotoFile(request: express.Request, response: express.Response, 
     response.status(400).json({ success: false, error: message });
   });
 }
+
+function parseUploadMetadata(raw: unknown): ImageJobMetadata {
+  const metadata = typeof raw === 'string' ? JSON.parse(raw) : raw as Record<string, unknown>;
+  const title = typeof metadata.title === 'string' ? metadata.title.trim() : '';
+  const year = Number(metadata.year);
+  if (!title || !Number.isInteger(year) || year <= 0) throw new Error('标题和有效年份为必填项');
+  const tags = Array.isArray(metadata.tags)
+    ? [...new Set<string>(metadata.tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean))]
+    : [];
+  const ids = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string' && item.trim()) ? value : undefined;
+  const exif = metadata.exif && typeof metadata.exif === 'object' && !Array.isArray(metadata.exif)
+    ? Object.fromEntries(Object.entries(metadata.exif).filter(([, value]) => typeof value === 'string')) as unknown as ExifInfo
+    : undefined;
+  return { title, year, tags, albumIds: ids(metadata.albumIds), albumBeforePhotoIds: ids(metadata.albumBeforePhotoIds), exif };
+}
+
+/**
+ * Creates a short-lived, single-object upload URL. The browser uploads the
+ * source directly to OSS; no access key is ever sent to the browser.
+ */
+router.post('/upload-init', requireAdmin, express.json(), async (req, res) => {
+  try {
+    const metadata = parseUploadMetadata(req.body.metadata);
+    const filename = typeof req.body.filename === 'string' ? req.body.filename : 'upload.jpg';
+    const mime = typeof req.body.mime === 'string' ? req.body.mime : 'application/octet-stream';
+    const size = Number(req.body.size);
+    if (!Number.isFinite(size) || size <= 0 || size > 50 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: '单张图片不能超过 50 MB' });
+    }
+    if (!acceptedImageTypes.has(mime) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(filename)) {
+      return res.status(400).json({ success: false, error: '仅支持 JPEG、PNG、WebP 或 HEIC 图片' });
+    }
+    const config = await loadStorageConfig();
+    if (config.mode !== 'oss' || !config.oss) {
+      return res.json({ success: true, data: { direct: false } });
+    }
+    if (config.oss.provider === 'tencent' && config.oss.cloudImageProcessing && size > TENCENT_CI_MAX_FILE_SIZE) {
+      return res.status(400).json({ success: false, error: '腾讯云云端图片处理仅支持 32 MB 以内的图片' });
+    }
+    const sourceObjectKey = generateFilePath(filename, 'incoming', config.oss.uploadDir);
+    const client: any = await getOSSClient();
+    const uploadUrl = config.oss.provider === 'tencent'
+      ? client.getObjectUrl({ Bucket: config.oss.bucket, Region: config.oss.region, Key: sourceObjectKey, Sign: true, Method: 'PUT', Expires: 900 })
+      : client.signatureUrl(sourceObjectKey, { method: 'PUT', expires: 900, 'Content-Type': mime });
+    res.json({ success: true, data: { direct: true, uploadUrl, sourceObjectKey, mime, metadata } });
+  } catch (error: any) {
+    const status = error instanceof SyntaxError || /必填|仅支持/.test(error.message || '') ? 400 : 500;
+    res.status(status).json({ success: false, error: status === 400 ? error.message : '初始化直传失败', message: error.message });
+  }
+});
+
+/** Queue processing only after the browser reports a successful direct upload. */
+router.post('/upload-complete', requireAdmin, express.json(), async (req, res) => {
+  try {
+    const metadata = parseUploadMetadata(req.body.metadata);
+    const sourceObjectKey = typeof req.body.sourceObjectKey === 'string' ? req.body.sourceObjectKey : '';
+    const mime = typeof req.body.mime === 'string' ? req.body.mime : 'application/octet-stream';
+    const config = await loadStorageConfig();
+    const incomingPrefix = `${normalizeUploadDir(config.oss?.uploadDir)}/incoming/`;
+    if (config.mode !== 'oss' || !config.oss || !sourceObjectKey.startsWith(incomingPrefix)) {
+      return res.status(400).json({ success: false, error: '无效的直传图片对象' });
+    }
+    await assertOSSFileExists(sourceObjectKey);
+    const jobId = await enqueueImageJob(sourceObjectKey, mime, metadata);
+    res.status(202).json({ success: true, data: { jobId, status: 'queued' } });
+  } catch (error: any) {
+    const status = error instanceof SyntaxError || /必填/.test(error.message || '') ? 400 : 500;
+    res.status(status).json({ success: false, error: status === 400 ? error.message : 'OSS 中未找到刚上传的源文件，未创建处理任务', message: error.message });
+  }
+});
+
+/** Return the durable processing state for direct uploads owned by this admin session. */
+router.post('/upload-jobs/status', requireAdmin, express.json(), async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body.ids)
+      ? [...new Set<string>(req.body.ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0))]
+      : [];
+    if (ids.length === 0 || ids.length > 100) {
+      return res.status(400).json({ success: false, error: '请提供 1–100 个有效任务 ID' });
+    }
+    res.json({ success: true, data: await getImageJobStatuses(ids) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: '查询图片处理状态失败', message: error.message });
+  }
+});
 
 /**
  * GET /api/photos
@@ -197,13 +284,8 @@ router.post('/upload', requireAdmin, receivePhotoFile, async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, error: '没有上传文件' });
   let stored: { url: string; thumbnailUrl: string; objectKey: string; thumbnailObjectKey: string } | null = null;
   try {
-    const metadata = JSON.parse(req.body.metadata || '{}');
-    const title = typeof metadata.title === 'string' ? metadata.title.trim() : '';
-    const year = Number(metadata.year);
-    if (!title || !Number.isInteger(year) || year <= 0) {
-      return res.status(400).json({ success: false, error: '标题和有效年份为必填项' });
-    }
-    const tags: string[] = Array.isArray(metadata.tags) ? [...new Set<string>(metadata.tags.filter((tag: unknown): tag is string => typeof tag === 'string').map((tag: string) => tag.trim()).filter(Boolean))] : [];
+    const metadata = parseUploadMetadata(req.body.metadata || '{}');
+    const { title, year, tags } = metadata;
     const storageConfig = await loadStorageConfig();
     const useTencentCloudProcessing = storageConfig.mode === 'oss'
       && storageConfig.oss?.provider === 'tencent'

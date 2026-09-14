@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PhotosPanel } from './PhotosPanel';
 import { photoService } from '../../api/photoService';
+import { photoUploadService } from '../../api/photoUploadService';
 
 const photos = vi.hoisted(() => [
   { id: 'one', title: '横幅', url: '/one.jpg', thumbnailUrl: '/one-small.jpg', width: 1200, height: 800, year: 2026, tags: [], createdAt: '2026-01-01', likesCount: 7, viewsCount: 19 },
@@ -19,8 +20,19 @@ vi.mock('../../api/photoService', () => ({
   },
 }));
 vi.mock('../../api/tagService', () => ({ tagService: { getAvailableYears: vi.fn().mockResolvedValue([]), getAllTagNames: vi.fn().mockResolvedValue([]) } }));
-vi.mock('../../api/photoUploadService', () => ({ photoUploadService: { uploadPhoto: vi.fn() } }));
-vi.mock('../PhotoModal', () => ({ PhotoModal: () => null }));
+vi.mock('../../api/photoUploadService', () => ({
+  forgetPendingUploadJobs: vi.fn(),
+  photoUploadService: { uploadPhoto: vi.fn(), getJobStatuses: vi.fn() },
+}));
+vi.mock('../PhotoModal', () => ({
+  PhotoModal: (props: any) => <button type="button" onClick={() => props.onUploadBatchComplete({
+    attempted: 1,
+    succeeded: 1,
+    failed: 0,
+    photos: [],
+    jobs: [{ kind: 'queued', jobId: 'job-1', photoId: 'photo-job-1' }],
+  })}>模拟完成直传</button>,
+}));
 
 beforeEach(() => { localStorage.clear(); });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -71,5 +83,35 @@ describe('PhotosPanel thumbnail sizing', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '选择 横幅' }));
     expect(trigger).toBeDisabled();
     expect(trigger).not.toHaveClass('is-visible');
+  });
+
+  it('tracks queued uploads and refreshes after background processing completes', async () => {
+    vi.mocked(photoUploadService.getJobStatuses).mockResolvedValue([
+      { id: 'job-1', photoId: 'photo-job-1', status: 'completed', error: null },
+    ]);
+    render(<PhotosPanel onSessionExpired={vi.fn()} />);
+    await act(async () => {});
+    const callsBeforeCompletion = vi.mocked(photoService.getAdminPhotos).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: '模拟完成直传' }));
+    await act(async () => {});
+    expect(photoUploadService.getJobStatuses).toHaveBeenCalledWith(['job-1'], expect.any(AbortSignal));
+    expect(photoService.getAdminPhotos).toHaveBeenCalledTimes(callsBeforeCompletion + 1);
+    expect(screen.getByText('已完成 1 张照片处理')).toBeInTheDocument();
+  });
+
+  it('opens the dedicated workspace on desktop and keeps the modal path on mobile', async () => {
+    const onOpenDesktopUpload = vi.fn();
+    const matchMedia = vi.fn().mockReturnValue({ matches: true } as MediaQueryList);
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: matchMedia });
+    const { rerender } = render(<PhotosPanel onSessionExpired={vi.fn()} onOpenDesktopUpload={onOpenDesktopUpload} />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: '上传照片' }));
+    expect(onOpenDesktopUpload).toHaveBeenCalledOnce();
+
+    matchMedia.mockReturnValue({ matches: false } as MediaQueryList);
+    rerender(<PhotosPanel onSessionExpired={vi.fn()} onOpenDesktopUpload={onOpenDesktopUpload} />);
+    fireEvent.click(screen.getByRole('button', { name: '上传照片' }));
+    expect(screen.getByRole('button', { name: '模拟完成直传' })).toBeInTheDocument();
+    delete (window as Partial<Window>).matchMedia;
   });
 });

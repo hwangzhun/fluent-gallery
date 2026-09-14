@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { generateFilePath, normalizePublicUrl, putTencentProcessedImages, validateTencentPublicUrl } from './oss';
-import type { OSSConfig } from './config';
+import { assertOSSFileExists, generateFilePath, normalizePublicUrl, putTencentProcessedImages, validateTencentPublicUrl } from './oss';
+import type { OSSConfig, StorageConfig } from './config';
 
 describe('storage paths', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -11,6 +11,24 @@ describe('storage paths', () => {
 
     expect(generateFilePath('photo.jpg')).toMatch(/^fluent_gallery\/photos\/2026\/09\/[^/]+\.jpg$/);
     expect(generateFilePath('photo.webp', 'thumbs', '/portfolio//')).toMatch(/^portfolio\/thumbs\/2026\/09\/[^/]+\.webp$/);
+  });
+
+  it('verifies browser-direct objects with the provider HEAD API', async () => {
+    const aliyun = { head: vi.fn().mockResolvedValue({ status: 200 }) } as any;
+    const aliyunConfig: StorageConfig = { mode: 'oss', oss: {
+      provider: 'aliyun', uploadDir: 'gallery', cloudImageProcessing: false, publicUrl: '',
+      region: 'oss-cn-hangzhou', bucket: 'gallery', accessKeyId: 'id', accessKeySecret: 'secret',
+    } };
+    await expect(assertOSSFileExists('gallery/incoming/source.jpg', { config: aliyunConfig, client: aliyun })).resolves.toBeUndefined();
+    expect(aliyun.head).toHaveBeenCalledWith('gallery/incoming/source.jpg');
+
+    const tencent = { headObject: vi.fn((_input, callback) => callback(null)) } as any;
+    const tencentConfig: StorageConfig = { mode: 'oss', oss: {
+      provider: 'tencent', uploadDir: 'gallery', cloudImageProcessing: false, publicUrl: '',
+      region: 'ap-hongkong', bucket: 'gallery-123', accessKeyId: 'id', accessKeySecret: 'secret',
+    } };
+    await expect(assertOSSFileExists('gallery/incoming/source.jpg', { config: tencentConfig, client: tencent })).resolves.toBeUndefined();
+    expect(tencent.headObject).toHaveBeenCalledWith(expect.objectContaining({ Key: 'gallery/incoming/source.jpg' }), expect.any(Function));
   });
 });
 

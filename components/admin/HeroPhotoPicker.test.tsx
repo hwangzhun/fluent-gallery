@@ -15,25 +15,43 @@ describe('HeroPhotoPicker', () => {
   it('searches visually and confirms the selected photo', () => {
     const onClose = vi.fn();
     const onConfirm = vi.fn();
-    render(<HeroPhotoPicker open photos={[first, second]} selectedId={null} onClose={onClose} onConfirm={onConfirm} />);
+    render(<HeroPhotoPicker open photos={[first, second]} selectedIds={[]} onClose={onClose} onConfirm={onConfirm} />);
     expect(screen.getByRole('dialog', { name: '选择 Hero 封面图片' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '搜索 Hero 候选图片' }), { target: { value: '2025' } });
-    expect(screen.getByRole('radio', { name: /街角/ })).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: /树影/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: /街角/ }));
+    expect(screen.getByRole('checkbox', { name: /街角/ })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /树影/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: /街角/ }));
     fireEvent.click(screen.getByRole('button', { name: '确认选择' }));
-    expect(onConfirm).toHaveBeenCalledWith('two');
+    expect(onConfirm).toHaveBeenCalledWith(['two']);
     expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('supports automatic selection and restores page scrolling when closed', () => {
     const onClose = vi.fn();
-    const { rerender } = render(<HeroPhotoPicker open photos={[first]} selectedId={first.id} onClose={onClose} onConfirm={vi.fn()} />);
+    const { rerender } = render(<HeroPhotoPicker open photos={[first]} selectedIds={[first.id]} onClose={onClose} onConfirm={vi.fn()} />);
     expect(document.body.style.overflow).toBe('hidden');
-    fireEvent.click(screen.getByRole('radio', { name: /自动选择/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /自动选择/ }));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
-    rerender(<HeroPhotoPicker open={false} photos={[first]} selectedId={first.id} onClose={onClose} onConfirm={vi.fn()} />);
+    rerender(<HeroPhotoPicker open={false} photos={[first]} selectedIds={[first.id]} onClose={onClose} onConfirm={vi.fn()} />);
     expect(document.body.style.overflow).toBe('');
   });
+});
+
+
+it('retains selections across searches and discards changes on cancel', () => {
+  const onConfirm = vi.fn();
+  const onClose = vi.fn();
+  const selectedIds = [first.id];
+  const { rerender } = render(<HeroPhotoPicker open photos={[first, second]} selectedIds={selectedIds} onClose={onClose} onConfirm={onConfirm} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: '街角' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: /街角/ }));
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
+  expect(screen.getByRole('checkbox', { name: /树影/ })).toHaveAttribute('aria-checked', 'true');
+  expect(screen.getByRole('checkbox', { name: /街角/ })).toHaveAttribute('aria-checked', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  expect(onConfirm).not.toHaveBeenCalled();
+  rerender(<HeroPhotoPicker open={false} photos={[first, second]} selectedIds={selectedIds} onClose={onClose} onConfirm={onConfirm} />);
+  rerender(<HeroPhotoPicker open photos={[first, second]} selectedIds={selectedIds} onClose={onClose} onConfirm={onConfirm} />);
+  expect(screen.getByRole('checkbox', { name: /街角/ })).toHaveAttribute('aria-checked', 'false');
 });
