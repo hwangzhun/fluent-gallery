@@ -225,7 +225,6 @@ export function BatchWorkspace({ items, activeItem, phase, completedCount, share
                 <PhotoBasicFields data={activeItem.data} onChange={onChange} sharedFields={sharedFields} onToggleShared={onToggleShared} disabled={disabled} editorKey={activeItem.id} onRegenerateTitle={onRegenerateTitle} titleGenerating={titleGenerating} titleGenerationDisabled={titleGenerationDisabled} expandTags={expandTags} />
                 {activeItem.titleError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 重新生成标题失败：{activeItem.titleError}</p>}
                 {activeItem.analysisError && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">AI 生成标题与标签失败：{activeItem.analysisError}</p>}
-                <div className="mt-5 rounded-xl bg-blue-50 px-3.5 py-3 text-xs leading-5 text-blue-700"><span className="font-medium">公共字段：</span>打开开关后，再次修改该字段会同步到当前批次。</div>
               </>
             ) : (
               <PhotoExifFields data={activeItem.data} onChange={onChange} sharedFields={sharedFields} onToggleShared={onToggleShared} disabled={disabled} loadingExif={activeItem.exifStatus === 'loading'} compact />
