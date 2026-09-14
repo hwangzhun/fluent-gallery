@@ -4,6 +4,7 @@ node_modules/
 # Build output and caches
 dist/
 dist-ssr/
+dist-server/
 coverage/
 .vite/
 .cache/

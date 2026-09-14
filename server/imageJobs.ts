@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import type { ExifInfo } from '../database/types';
 import { dbAll, dbGet, dbRun } from '../database/db';
 import { PhotoDao } from '../database/dao/photoDao';
@@ -44,7 +44,7 @@ let workerPromise: Promise<void> | undefined;
 const photoIdForJob = (jobId: string) => `photo-${jobId}`;
 
 export async function enqueueImageJob(sourceObjectKey: string, sourceMime: string, metadata: ImageJobMetadata) {
-  const id = uuidv4();
+  const id = randomUUID();
   await dbRun(
     `INSERT INTO image_jobs (id, source_object_key, source_mime, metadata, status, updated_at)
      VALUES (?, ?, ?, ?, 'queued', datetime('now'))`,

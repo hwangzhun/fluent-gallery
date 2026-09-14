@@ -22,7 +22,7 @@ vi.mock('./api/photoService', () => ({
 }));
 vi.mock('./api/settingsService', () => ({
   settingsService: {
-    getAnalyticsSettings: vi.fn().mockResolvedValue({ enabled: false, measurementId: '' }),
+    getAnalyticsSettings: vi.fn().mockResolvedValue({ enabled: false, measurementId: '', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' }),
     getGallerySettings: vi.fn().mockResolvedValue({ randomizePhotos: false, heroPhotoId: null, heroImageFit: 'contain', heroAspectRatio: '4:3', heroImagePositionX: 50, heroImagePositionY: 50, heroImageScale: 1, heroImagePositionPhotoId: null }),
     getSeoSettings: vi.fn().mockResolvedValue({ title: 'Fluent Gallery', description: '', keywords: '', author: '', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '' }),
   },

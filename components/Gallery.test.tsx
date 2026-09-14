@@ -5,15 +5,18 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MasonryGallery } from './MasonryGallery';
 import { Lightbox } from './Lightbox';
-import { likeService, viewService } from '../api';
+import { likeService } from '../api/likeService';
+import { viewService } from '../api/viewService';
 import type { Photo } from '../types';
 
-vi.mock('../api', () => ({
+vi.mock('../api/likeService', () => ({
   likeService: {
     isLiked: vi.fn().mockReturnValue(false),
     getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }),
     likePhoto: vi.fn().mockResolvedValue({ liked: true, likesCount: 1, created: true }),
   },
+}));
+vi.mock('../api/viewService', () => ({
   viewService: {
     getViewStatus: vi.fn().mockResolvedValue({ viewsCount: 0 }),
     recordView: vi.fn().mockResolvedValue({ viewsCount: 1 }),

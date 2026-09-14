@@ -2,19 +2,21 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { likeService } from '../api';
+import { likeService } from '../api/likeService';
 import { analytics } from '../api/analyticsService';
 import { GalleryFilters } from './GalleryFilters';
 import { Lightbox } from './Lightbox';
 import { PhotoCard } from './PhotoCard';
 import type { Photo } from '../types';
 
-vi.mock('../api', () => ({
+vi.mock('../api/likeService', () => ({
   likeService: {
     isLiked: vi.fn().mockReturnValue(false),
     getLikeStatus: vi.fn().mockResolvedValue({ liked: false, likesCount: 0 }),
     likePhoto: vi.fn().mockResolvedValue({ liked: true, likesCount: 1, created: true }),
   },
+}));
+vi.mock('../api/viewService', () => ({
   viewService: {
     getViewStatus: vi.fn().mockResolvedValue({ viewed: false, viewsCount: 0 }),
     recordView: vi.fn().mockResolvedValue({ viewed: true, viewsCount: 1 }),

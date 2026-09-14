@@ -402,7 +402,7 @@ router.post('/', requireAdmin, async (req, res) => {
     const photoId = generatePhotoId();
 
     // 创建照片
-    const photo = await photoDao.createPhoto(input, photoId);
+    await photoDao.createPhoto(input, photoId);
 
     // 获取包含标签的照片
     const photoWithTags = await photoDao.getPhotoWithTagsById(photoId);

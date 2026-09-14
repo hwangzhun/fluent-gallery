@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { AdminDashboard } from './AdminDashboard';
+import { AdminDashboard, formatAppVersion } from './AdminDashboard';
 
 vi.mock('../api/authService', () => ({
   authService: { session: vi.fn().mockResolvedValue({ authenticated: true }), logout: vi.fn() },
@@ -20,6 +20,10 @@ vi.mock('./PhotoModal', () => ({ PhotoModal: (props: any) => <div data-presentat
 afterEach(cleanup);
 
 describe('admin footer', () => {
+  it('presents the slim build as a readable edition name', () => {
+    expect(formatAppVersion('1.0.8-slim')).toBe('1.0.8 Slim');
+  });
+
   it('shows the package version injected by Vite', async () => {
     render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
     expect(await screen.findByText('版本 V0.0.0')).toBeInTheDocument();

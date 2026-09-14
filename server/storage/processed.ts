@@ -1,6 +1,6 @@
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, join } from 'node:path';
-import { v4 as uuidv4 } from 'uuid';
 import { deleteFile } from './index';
 import { getOSSClient, generateFilePath, putOSSFile } from './oss';
 import { loadStorageConfig } from './config';
@@ -14,7 +14,7 @@ export interface StoredProcessedImages {
 
 function localPath(prefix: 'photos' | 'thumbs') {
   const date = new Date();
-  return `${prefix}/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${uuidv4()}.avif`;
+  return `${prefix}/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${randomUUID()}.avif`;
 }
 
 export async function storeProcessedImages(display: Buffer, thumbnail: Buffer): Promise<StoredProcessedImages> {

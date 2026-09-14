@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, Info, Heart, Eye, Share2 } from 'lucide-react';
 import { Photo } from '../types';
-import { likeService, viewService } from '../api';
+import { likeService } from '../api/likeService';
+import { viewService } from '../api/viewService';
 import { PhotoImage } from './PhotoImage';
 import { analytics, type InteractionSource, type NavigationMethod } from '../api/analyticsService';
 

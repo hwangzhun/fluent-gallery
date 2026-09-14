@@ -1,6 +1,9 @@
 export interface AnalyticsSettings {
   enabled: boolean;
   measurementId: string;
+  umamiEnabled: boolean;
+  umamiWebsiteId: string;
+  umamiScriptUrl: string;
 }
 
 export type InteractionSource = 'hero' | 'gallery' | 'album' | 'shared_link' | 'lightbox';
@@ -8,23 +11,34 @@ export type NavigationMethod = 'button' | 'keyboard' | 'swipe';
 
 type AnalyticsParams = Record<string, string | number | boolean | undefined>;
 type CollectionState = 'pending' | 'enabled' | 'disabled';
+type UmamiPayload = Record<string, unknown>;
+type UmamiTrack = {
+  (eventName: string, data?: AnalyticsParams): unknown;
+  (payload: UmamiPayload | ((properties: UmamiPayload) => UmamiPayload)): unknown;
+};
 
 declare global {
   interface Window {
     dataLayer?: unknown[][];
     gtag?: (...args: unknown[]) => void;
+    umami?: { track: UmamiTrack };
   }
 }
 
 const MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]+$/i;
-const SCRIPT_ID = 'fluent-gallery-ga4';
+const GA_SCRIPT_ID = 'fluent-gallery-ga4';
+const UMAMI_SCRIPT_ID = 'fluent-gallery-umami';
 
 class AnalyticsService {
-  private enabled = false;
-  private initialized = false;
+  private gaEnabled = false;
+  private gaInitialized = false;
+  private umamiEnabled = false;
+  private umamiReady = false;
   private collectionState: CollectionState = 'pending';
   private measurementId = '';
+  private umamiConfigKey = '';
   private pending: Array<[string, AnalyticsParams]> = [];
+  private umamiPending: Array<[string, AnalyticsParams]> = [];
   private viewedPhotos = new Set<string>();
   private pendingViewedPhotos = new Set<string>();
 
@@ -39,41 +53,18 @@ class AnalyticsService {
 
   initialize(settings: AnalyticsSettings): boolean {
     const measurementId = settings.measurementId.trim().toUpperCase();
-    if (!settings.enabled || !this.isValidMeasurementId(measurementId)) {
+    const gaEnabled = settings.enabled && this.isValidMeasurementId(measurementId);
+    const umamiWebsiteId = settings.umamiWebsiteId.trim();
+    const umamiScriptUrl = settings.umamiScriptUrl.trim();
+    const umamiEnabled = settings.umamiEnabled && Boolean(umamiWebsiteId) && this.isValidHttpUrl(umamiScriptUrl);
+    if (!gaEnabled && !umamiEnabled) {
       this.disable();
       return false;
     }
 
-    const previousId = this.measurementId;
-    const needsConfiguration = !this.initialized || previousId !== measurementId;
-    if (previousId && previousId !== measurementId) {
-      (window as unknown as Record<string, unknown>)[`ga-disable-${previousId}`] = true;
-    }
-    this.enabled = true;
     this.collectionState = 'enabled';
-    this.measurementId = measurementId;
-    (window as unknown as Record<string, unknown>)[`ga-disable-${measurementId}`] = false;
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = window.gtag || ((...args: unknown[]) => { window.dataLayer?.push(args); });
-
-    if (needsConfiguration) {
-      window.gtag('js', new Date());
-      window.gtag('config', measurementId, { send_page_view: false });
-      this.initialized = true;
-    }
-
-    // Vitest receives the same event queue but never loads Google's remote script.
-    const existingScript = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-    if (existingScript?.dataset.measurementId !== measurementId) existingScript?.remove();
-    if (import.meta.env.MODE !== 'test' && !document.getElementById(SCRIPT_ID)) {
-      const script = document.createElement('script');
-      script.id = SCRIPT_ID;
-      script.dataset.measurementId = measurementId;
-      script.async = true;
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
-      script.onerror = () => { /* Analytics must never interrupt the gallery. */ };
-      document.head.appendChild(script);
-    }
+    this.configureGa(gaEnabled, measurementId);
+    this.configureUmami(umamiEnabled, umamiWebsiteId, umamiScriptUrl);
 
     this.pendingViewedPhotos.forEach(photoId => this.viewedPhotos.add(photoId));
     this.pendingViewedPhotos.clear();
@@ -83,27 +74,142 @@ class AnalyticsService {
   }
 
   disable(): void {
-    this.enabled = false;
     this.collectionState = 'disabled';
     if (this.measurementId) (window as unknown as Record<string, unknown>)[`ga-disable-${this.measurementId}`] = true;
+    this.gaEnabled = false;
+    this.gaInitialized = false;
+    this.umamiEnabled = false;
+    this.umamiReady = false;
+    this.measurementId = '';
+    this.umamiConfigKey = '';
     this.pending = [];
+    this.umamiPending = [];
     this.pendingViewedPhotos.clear();
+    document.getElementById(GA_SCRIPT_ID)?.remove();
+    document.getElementById(UMAMI_SCRIPT_ID)?.remove();
+    delete window.umami;
   }
 
   private send(name: string, params: AnalyticsParams = {}): boolean {
     const cleaned = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined));
     if (this.collectionState === 'disabled') return false;
-    if (this.collectionState === 'pending' || !this.initialized) {
+    if (this.collectionState === 'pending') {
       this.pending.push([name, cleaned]);
       return true;
     }
-    if (!this.enabled) return false;
+    let accepted = false;
+    if (this.gaEnabled && this.gaInitialized) {
+      try {
+        window.gtag?.('event', name, cleaned);
+        accepted = true;
+      } catch { /* One analytics provider must not interrupt another. */ }
+    }
+    if (this.umamiEnabled) {
+      if (!this.umamiReady || !window.umami?.track) {
+        this.umamiPending.push([name, cleaned]);
+        accepted = true;
+      } else {
+        accepted = this.sendToUmami(name, cleaned) || accepted;
+      }
+    }
+    return accepted;
+  }
+
+  private configureGa(enabled: boolean, measurementId: string): void {
+    if (!enabled) {
+      if (this.measurementId) (window as unknown as Record<string, unknown>)[`ga-disable-${this.measurementId}`] = true;
+      this.gaEnabled = false;
+      this.gaInitialized = false;
+      this.measurementId = '';
+      document.getElementById(GA_SCRIPT_ID)?.remove();
+      return;
+    }
+    const previousId = this.measurementId;
+    const needsConfiguration = !this.gaInitialized || previousId !== measurementId;
+    if (previousId && previousId !== measurementId) (window as unknown as Record<string, unknown>)[`ga-disable-${previousId}`] = true;
+    this.gaEnabled = true;
+    this.measurementId = measurementId;
+    (window as unknown as Record<string, unknown>)[`ga-disable-${measurementId}`] = false;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || ((...args: unknown[]) => { window.dataLayer?.push(args); });
+    if (needsConfiguration) {
+      window.gtag('js', new Date());
+      window.gtag('config', measurementId, { send_page_view: false });
+      this.gaInitialized = true;
+    }
+    const existingScript = document.getElementById(GA_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existingScript?.dataset.measurementId !== measurementId) existingScript?.remove();
+    if (import.meta.env.MODE !== 'test' && !document.getElementById(GA_SCRIPT_ID)) {
+      const script = document.createElement('script');
+      script.id = GA_SCRIPT_ID;
+      script.dataset.measurementId = measurementId;
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
+      script.onerror = () => { /* Analytics must never interrupt the gallery. */ };
+      document.head.appendChild(script);
+    }
+  }
+
+  private configureUmami(enabled: boolean, websiteId: string, scriptUrl: string): void {
+    if (!enabled) {
+      this.umamiEnabled = false;
+      this.umamiReady = false;
+      this.umamiConfigKey = '';
+      this.umamiPending = [];
+      document.getElementById(UMAMI_SCRIPT_ID)?.remove();
+      delete window.umami;
+      return;
+    }
+    const configKey = `${websiteId}\n${scriptUrl}`;
+    const existingScript = document.getElementById(UMAMI_SCRIPT_ID) as HTMLScriptElement | null;
+    if (this.umamiConfigKey !== configKey || existingScript?.dataset.websiteId !== websiteId || existingScript?.src !== scriptUrl) {
+      existingScript?.remove();
+      delete window.umami;
+      this.umamiReady = false;
+      this.umamiPending = [];
+    }
+    this.umamiEnabled = true;
+    this.umamiConfigKey = configKey;
+    if (document.getElementById(UMAMI_SCRIPT_ID)) return;
+    const script = document.createElement('script');
+    script.id = UMAMI_SCRIPT_ID;
+    script.defer = true;
+    script.src = scriptUrl;
+    script.dataset.websiteId = websiteId;
+    script.dataset.autoTrack = 'false';
+    script.onload = () => {
+      if (!this.umamiEnabled || this.umamiConfigKey !== configKey || !window.umami?.track) return;
+      this.umamiReady = true;
+      const pending = this.umamiPending.splice(0);
+      pending.forEach(([name, params]) => this.sendToUmami(name, params));
+    };
+    script.onerror = () => {
+      if (this.umamiConfigKey !== configKey) return;
+      this.umamiReady = false;
+      this.umamiEnabled = false;
+      this.umamiPending = [];
+    };
+    document.head.appendChild(script);
+  }
+
+  private sendToUmami(name: string, params: AnalyticsParams): boolean {
     try {
-      window.gtag?.('event', name, cleaned);
+      if (!window.umami?.track) return false;
+      if (name === 'page_view') {
+        const path = typeof params.page_path === 'string' ? params.page_path : window.location.pathname;
+        const title = typeof params.page_title === 'string' ? params.page_title : document.title;
+        window.umami.track(properties => ({ ...properties, url: path, title }));
+      } else {
+        window.umami.track(name, params);
+      }
       return true;
     } catch {
       return false;
     }
+  }
+
+  private isValidHttpUrl(value: string): boolean {
+    try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
   }
 
   pageView(path: '/' | '/albums', title: string): void {
@@ -173,16 +279,11 @@ class AnalyticsService {
 
   /** Test-only state reset; harmless in production and keeps the singleton deterministic. */
   reset(): void {
-    this.enabled = false;
-    this.initialized = false;
+    this.disable();
     this.collectionState = 'pending';
-    this.measurementId = '';
-    this.pending = [];
     this.viewedPhotos.clear();
-    this.pendingViewedPhotos.clear();
     delete window.gtag;
     delete window.dataLayer;
-    document.getElementById(SCRIPT_ID)?.remove();
   }
 }
 

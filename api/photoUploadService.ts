@@ -1,4 +1,3 @@
-import type { Photo } from '../types';
 import type { PhotoUploadData, PhotoUploadResult, QueuedPhotoUpload } from '../components/photo-modal/types';
 import type { PhotoWithTags } from '../database/types';
 import { apiFetch } from './config';

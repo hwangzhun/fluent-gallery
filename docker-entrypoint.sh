@@ -7,6 +7,15 @@ mkdir -p /app/data /app/uploads /app/logs
 chown -R node:node /app/data
 chown node:node /app/uploads /app/logs
 
-# The first argument after `sh -c` becomes $0, so provide a placeholder and
-# preserve the complete Docker CMD in $@.
-exec su -s /bin/sh node -c 'exec "$@"' fluent-gallery "$@"
+# Containers recreated from the V1.0.8 configuration may retain its old
+# TypeScript runtime command. The slim image ships only the compiled server,
+# so transparently translate that legacy command during a rolling upgrade.
+case "${1:-}" in
+  tsx|node_modules/.bin/tsx|./node_modules/.bin/tsx|/app/node_modules/.bin/tsx)
+    if [ "${2:-}" = "server/index.ts" ] || [ "${2:-}" = "/app/server/index.ts" ]; then
+      set -- node dist-server/index.js
+    fi
+    ;;
+esac
+
+exec su-exec node "$@"

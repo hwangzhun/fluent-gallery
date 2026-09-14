@@ -2,7 +2,7 @@
 body:has(.admin-shell) { min-width: 0; }
 .admin-shell {
   --paper: #f7f5ef; --ink: #30332e; --muted: #6f7367; --line: #dcdcd1; --accent: #a25f43;
-  --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif;
+  --serif: "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif;
   --motion-fast: 120ms; --motion-standard: 180ms; --motion-large: 240ms;
   --ease-out-quart: cubic-bezier(.165, .84, .44, 1); --ease-in-out-cubic: cubic-bezier(.645, .045, .355, 1);
   --color-white: #fffefb;

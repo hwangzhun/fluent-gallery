@@ -23,9 +23,6 @@ export interface OSSConfig {
   accessKeySecret: string;
   bucket: string;
   endpoint?: string;
-  // STS 配置（用于临时凭证）
-  roleArn?: string; // RAM 角色 ARN（阿里云）或 CAM 角色（腾讯云）
-  roleSessionName?: string; // 会话名称
 }
 
 export interface StorageConfig {
@@ -120,9 +117,7 @@ export function loadStorageConfigFromEnv(): StorageConfig {
       accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
       accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
       bucket: process.env.OSS_BUCKET || '',
-      endpoint: process.env.OSS_ENDPOINT,
-      roleArn: process.env.OSS_ROLE_ARN,
-      roleSessionName: process.env.OSS_ROLE_SESSION_NAME || 'fluent-gallery-session'
+      endpoint: process.env.OSS_ENDPOINT
     };
 
     // 验证必填字段

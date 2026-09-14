@@ -15,8 +15,12 @@ const DEFAULT_SEO = {
   author: 'Fluent Gallery', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '',
 };
 const DEFAULT_AI = { baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash' };
-const DEFAULT_ANALYTICS = { enabled: false, measurementId: '' };
+const DEFAULT_ANALYTICS = { enabled: false, measurementId: '', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' };
 const GA_MEASUREMENT_ID = /^G-[A-Z0-9]+$/i;
+
+function isHttpUrl(value: string): boolean {
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
 
 async function readStored<T extends object>(key: string, fallback: T): Promise<T> {
   await ensureSettingsSchema();
@@ -60,7 +64,7 @@ router.get('/storage', requireAdmin, async (_request, response) => {
       oss: {
         provider: oss?.provider || 'aliyun', uploadDir: oss?.uploadDir || 'fluent_gallery', region: oss?.region || '', bucket: oss?.bucket || '',
         cloudImageProcessing: oss?.cloudImageProcessing === true, publicUrl: normalizePublicUrl(oss?.publicUrl),
-        endpoint: oss?.endpoint || '', roleArn: oss?.roleArn || '', roleSessionName: oss?.roleSessionName || 'fluent-gallery-session',
+        endpoint: oss?.endpoint || '',
         hasAccessKeyId: Boolean(oss?.accessKeyId), hasAccessKeySecret: Boolean(oss?.accessKeySecret),
       },
     }});
@@ -84,7 +88,6 @@ router.put('/storage', requireAdmin, async (request, response) => {
       publicUrl: normalizePublicUrl(oss?.publicUrl ?? existing.oss?.publicUrl ?? ''),
       accessKeyId: oss?.accessKeyId || existing.oss?.accessKeyId || '', accessKeySecret: oss?.accessKeySecret || existing.oss?.accessKeySecret || '',
       bucket: oss?.bucket || existing.oss?.bucket || '', endpoint: oss?.endpoint ?? existing.oss?.endpoint ?? '',
-      roleArn: oss?.roleArn ?? existing.oss?.roleArn ?? '', roleSessionName: oss?.roleSessionName || existing.oss?.roleSessionName || 'fluent-gallery-session',
     };
     const mergedLocal = {
       uploadDir: local?.uploadDir || existing.local?.uploadDir || defaultLocal.uploadDir,
@@ -258,20 +261,36 @@ router.get('/analytics', async (_request, response) => {
   response.json({ success: true, data: {
     enabled: stored.enabled === true,
     measurementId: typeof stored.measurementId === 'string' ? stored.measurementId : '',
+    umamiEnabled: stored.umamiEnabled === true,
+    umamiWebsiteId: typeof stored.umamiWebsiteId === 'string' ? stored.umamiWebsiteId : '',
+    umamiScriptUrl: typeof stored.umamiScriptUrl === 'string' ? stored.umamiScriptUrl : DEFAULT_ANALYTICS.umamiScriptUrl,
   }});
 });
 
 router.put('/analytics', requireAdmin, async (request, response) => {
   const enabled = request.body?.enabled;
   const measurementId = typeof request.body?.measurementId === 'string' ? request.body.measurementId.trim().toUpperCase() : '';
+  const umamiEnabled = request.body?.umamiEnabled;
+  const umamiWebsiteId = typeof request.body?.umamiWebsiteId === 'string' ? request.body.umamiWebsiteId.trim() : '';
+  const umamiScriptUrl = typeof request.body?.umamiScriptUrl === 'string' ? request.body.umamiScriptUrl.trim() : '';
   if (typeof enabled !== 'boolean') return response.status(400).json({ success: false, error: 'enabled 必须是布尔值' });
+  if (typeof umamiEnabled !== 'boolean') return response.status(400).json({ success: false, error: 'umamiEnabled 必须是布尔值' });
   if (measurementId && !GA_MEASUREMENT_ID.test(measurementId)) return response.status(400).json({ success: false, error: 'Measurement ID 格式无效，应为 G-XXXXXXXXXX' });
-  if (enabled && !measurementId) return response.status(400).json({ success: false, error: '启用数据统计前请填写 Measurement ID' });
+  if (enabled && !measurementId) return response.status(400).json({ success: false, error: '启用 GA4 前请填写 Measurement ID' });
+  if (umamiScriptUrl && !isHttpUrl(umamiScriptUrl)) return response.status(400).json({ success: false, error: 'Umami Script URL 必须是有效的 HTTP(S) 地址' });
+  if (umamiEnabled && !umamiWebsiteId) return response.status(400).json({ success: false, error: '启用 Umami 前请填写 Website ID' });
+  if (umamiEnabled && !umamiScriptUrl) return response.status(400).json({ success: false, error: '启用 Umami 前请填写 Script URL' });
   const existing = await readStored('analytics_config', DEFAULT_ANALYTICS);
-  const value = { enabled, measurementId: measurementId || existing.measurementId || '' };
+  const value = {
+    enabled,
+    measurementId: measurementId || existing.measurementId || '',
+    umamiEnabled,
+    umamiWebsiteId: umamiWebsiteId || existing.umamiWebsiteId || '',
+    umamiScriptUrl: umamiScriptUrl || existing.umamiScriptUrl || DEFAULT_ANALYTICS.umamiScriptUrl,
+  };
   await ensureSettingsSchema();
   await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('analytics_config', ?, datetime('now'))", [JSON.stringify(value)]);
-  response.json({ success: true, data: value, message: enabled ? 'GA4 数据统计已启用' : 'GA4 数据统计已停用' });
+  response.json({ success: true, data: value, message: enabled || umamiEnabled ? '数据统计已启用' : '数据统计已停用' });
 });
 
 router.get('/ai', requireAdmin, async (_request, response) => {

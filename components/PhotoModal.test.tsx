@@ -297,7 +297,7 @@ describe('PhotoModal batch upload', () => {
 
   it('blocks Escape while uploading and keeps the result page open after success', async () => {
     let resolveUpload!: (photo: Photo) => void;
-    const onUpload = vi.fn((data: PhotoUploadData) => new Promise<Photo>(resolve => {
+    const onUpload = vi.fn((_data: PhotoUploadData) => new Promise<Photo>(resolve => {
       resolveUpload = resolve;
     }));
     const onClose = vi.fn();

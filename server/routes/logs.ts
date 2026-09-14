@@ -2,7 +2,7 @@
  * 日志相关路由
  */
 import express from 'express';
-import { readFileSync, existsSync, readdirSync, statSync, writeFileSync, unlinkSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 const router = express.Router();
@@ -190,7 +190,7 @@ router.get('/', async (req, res) => {
  * GET /api/logs/files
  * 获取所有日志文件列表
  */
-router.get('/files', async (req, res) => {
+router.get('/files', async (_req, res) => {
   try {
     if (!existsSync(LOG_DIR)) {
       return res.json({

@@ -19,7 +19,7 @@ vi.mock('../../api/settingsService', () => ({
     getGallerySettings: vi.fn().mockResolvedValue({ randomizePhotos: false, heroPhotoId: 'first', heroImageFit: 'cover', heroAspectRatio: '4:3', heroImagePositionX: 20, heroImagePositionY: 80, heroImageScale: 1.5, heroImagePositionPhotoId: 'first' }),
     getSeoSettings: vi.fn().mockResolvedValue({ title: 'Fluent Gallery | 摄影作品集', description: 'Fluent Gallery 是一个记录光影、城市、自然与日常片刻的摄影画廊。', keywords: 'Fluent Gallery, 摄影, 摄影作品集, 在线画廊, 光影, 城市摄影', author: 'Fluent Gallery', canonicalUrl: '', ogTitle: '', ogDescription: '', ogImage: '' }),
     getAiSettings: vi.fn().mockResolvedValue({ baseUrl: '', model: '', apiKey: '', hasApiKey: false }),
-    getAnalyticsSettings: vi.fn().mockResolvedValue({ enabled: false, measurementId: '' }),
+    getAnalyticsSettings: vi.fn().mockResolvedValue({ enabled: false, measurementId: '', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' }),
     updateGallerySettings: vi.fn(), updateStorageSettings: vi.fn(), updateSeoSettings: vi.fn(), updateAiSettings: vi.fn(), updateAnalyticsSettings: vi.fn(), updatePassword: vi.fn(),
   },
 }));
@@ -90,13 +90,16 @@ it('offers retry instead of saving blank defaults when author settings fail to l
   expect(await screen.findByRole('button', { name: '保存展示设置' })).toBeInTheDocument();
 });
 
-it('loads and saves GA4 analytics settings from the dedicated tab', async () => {
+it('loads and saves independent GA4 and Umami analytics settings', async () => {
   render(<SettingsPanel onSessionExpired={vi.fn()} />);
   fireEvent.click(await screen.findByRole('button', { name: '数据统计' }));
   fireEvent.click(screen.getByRole('switch', { name: '启用 GA4 统计' }));
   fireEvent.change(screen.getByLabelText('Measurement ID'), { target: { value: 'G-TEST123' } });
+  fireEvent.click(screen.getByRole('switch', { name: '启用 Umami 统计' }));
+  fireEvent.change(screen.getByLabelText('Umami Website ID'), { target: { value: 'website-one' } });
+  fireEvent.change(screen.getByLabelText('Umami Script URL'), { target: { value: 'https://stats.example.com/script.js' } });
   fireEvent.click(screen.getByRole('button', { name: '保存数据统计设置' }));
-  await waitFor(() => expect(settingsService.updateAnalyticsSettings).toHaveBeenCalledWith({ enabled: true, measurementId: 'G-TEST123' }));
+  await waitFor(() => expect(settingsService.updateAnalyticsSettings).toHaveBeenCalledWith({ enabled: true, measurementId: 'G-TEST123', umamiEnabled: true, umamiWebsiteId: 'website-one', umamiScriptUrl: 'https://stats.example.com/script.js' }));
 });
 
 it('masks configured storage and API keys without submitting the mask', async () => {

@@ -4,8 +4,6 @@ import cors from 'cors';
 import { initDatabase } from '../database/db';
 import photoRoutes from './routes/photos';
 import tagRoutes from './routes/tags';
-import ossRoutes from './routes/oss';
-import uploadRoutes from './routes/upload';
 import settingsRoutes from './routes/settings';
 import { ensureSettingsSchema } from './routes/settings';
 import logsRoutes from './routes/logs';
@@ -54,7 +52,7 @@ if (storageConfig.mode === 'local' && storageConfig.local) {
 }
 
 // 健康检查
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Fluent Gallery API 运行正常' });
 });
 
@@ -66,12 +64,13 @@ app.use('/api/photos', photoRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/albums', albumsRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/oss', requireAdmin, ossRoutes);
-app.use('/api/upload', requireAdmin, uploadRoutes);
 // 图库的公开展示设置由路由自行控制权限，其他设置仍需要管理员会话。
 app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/logs', requireAdmin, logsRoutes);
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: '接口不存在' });
+});
 
 function escapeHtml(value: string) { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char] || char)); }
 async function renderIndexHtml() {
@@ -102,12 +101,12 @@ if (process.env.NODE_ENV === 'production' && existsSync(distDir)) {
 }
 
 // 404 处理
-app.use((req, res) => {
+app.use((_req, res) => {
   res.status(404).json({ error: '接口不存在' });
 });
 
 // 错误处理
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('❌ 服务器错误:', err);
   res.status(500).json({ 
     error: '服务器内部错误',

@@ -3,7 +3,7 @@
  */
 import OSS from 'ali-oss';
 import COS from 'cos-nodejs-sdk-v5';
-import { loadStorageConfig, OSSConfig, OSSProvider, StorageConfig } from './config';
+import { loadStorageConfig, OSSConfig, StorageConfig } from './config';
 
 // 统一的客户端类型
 export type OSSClient = OSS | COS;
@@ -84,56 +84,6 @@ export async function getOSSClient(configOverride?: OSSConfig): Promise<OSSClien
 
     return new OSS(ossConfig);
   }
-}
-
-/**
- * 获取 STS 临时凭证
- */
-export async function getSTSCredentials(): Promise<{
-  accessKeyId: string;
-  accessKeySecret: string;
-  securityToken: string;
-  expiration: string;
-  region: string;
-  bucket: string;
-  provider?: OSSProvider;
-}> {
-  const config = await loadStorageConfig();
-  
-  if (!config.oss) {
-    throw new Error('OSS 配置不存在');
-  }
-
-  const { provider = 'aliyun', region, accessKeyId, accessKeySecret, bucket, roleArn, roleSessionName } = config.oss;
-
-  // 当前简化实现：直接返回主账号密钥
-  // 生产环境应该配置 STS/CAM 临时凭证
-  if (!roleArn) {
-    console.warn('⚠️  未配置临时凭证，使用主账号密钥（仅用于开发测试，生产环境请配置 STS/CAM）');
-    return {
-      accessKeyId,
-      accessKeySecret,
-      securityToken: '',
-      expiration: new Date(Date.now() + 3600 * 1000).toISOString(), // 1小时后过期
-      region,
-      bucket,
-      provider
-    };
-  }
-
-  // TODO: 集成 STS/CAM 临时凭证服务
-  // 阿里云：使用 STS SDK
-  // 腾讯云：使用 CAM SDK
-  console.warn('STS/CAM 功能需要配置，当前使用主账号密钥（仅开发测试）');
-  return {
-    accessKeyId,
-    accessKeySecret,
-    securityToken: '',
-    expiration: new Date(Date.now() + 3600 * 1000).toISOString(),
-    region,
-    bucket,
-    provider
-  };
 }
 
 /**

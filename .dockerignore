@@ -9,6 +9,7 @@ skills-lock.json
 node_modules
 dist
 dist-ssr
+dist-server
 coverage
 .vite
 .cache

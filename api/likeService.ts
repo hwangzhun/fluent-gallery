@@ -1,5 +1,5 @@
-import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import { API_BASE_URL } from './config';
+import { getVisitorFingerprint } from './visitorIdentity';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -25,60 +25,16 @@ interface LikeStatusResponse {
 
 // LocalStorage 键名
 const LIKED_PHOTOS_KEY = 'fluent_gallery_liked_photos';
-const FINGERPRINT_KEY = 'fluent_gallery_fingerprint';
 
 /**
  * 点赞服务
  */
 class LikeService {
-  private fingerprint: string | null = null;
-  private fpPromise: Promise<string> | null = null;
-
   /**
    * 获取或生成浏览器指纹
    */
   async getFingerprint(): Promise<string> {
-    if (this.fingerprint) {
-      return this.fingerprint;
-    }
-
-    // 检查 LocalStorage 中是否已保存
-    const savedFingerprint = localStorage.getItem(FINGERPRINT_KEY);
-    if (savedFingerprint) {
-      this.fingerprint = savedFingerprint;
-      return savedFingerprint;
-    }
-
-    // 如果正在生成，等待完成
-    if (this.fpPromise) {
-      return this.fpPromise;
-    }
-
-    // 生成新的指纹
-    this.fpPromise = (async () => {
-      try {
-        const fp = await FingerprintJS.load();
-        const result = await fp.get();
-        const fingerprint = result.visitorId;
-        
-        // 保存到 LocalStorage
-        localStorage.setItem(FINGERPRINT_KEY, fingerprint);
-        this.fingerprint = fingerprint;
-        
-        return fingerprint;
-      } catch (error) {
-        console.error('生成浏览器指纹失败:', error);
-        // 如果生成失败，使用时间戳作为后备方案
-        const fallbackFingerprint = `fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        localStorage.setItem(FINGERPRINT_KEY, fallbackFingerprint);
-        this.fingerprint = fallbackFingerprint;
-        return fallbackFingerprint;
-      } finally {
-        this.fpPromise = null;
-      }
-    })();
-
-    return this.fpPromise;
+    return getVisitorFingerprint();
   }
 
   /**

@@ -11,7 +11,7 @@ const photoDao = new PhotoDao();
  * GET /api/tags
  * 获取所有标签
  */
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const tags = await tagDao.getAllTags();
     res.json({
@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
  * GET /api/tags/names
  * 获取所有标签名称（用于前端筛选）
  */
-router.get('/names', async (req, res) => {
+router.get('/names', async (_req, res) => {
   try {
     const names = await tagDao.getAllTagNames();
     res.json({

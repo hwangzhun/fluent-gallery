@@ -33,8 +33,6 @@ export interface StorageSettings {
     hasAccessKeySecret?: boolean;
     bucket: string;
     endpoint?: string;
-    roleArn?: string;
-    roleSessionName?: string;
   };
 }
 
@@ -58,7 +56,13 @@ export interface SeoSettings {
 }
 
 export interface AiSettings { baseUrl: string; model: string; apiKey?: string; hasApiKey: boolean; }
-export interface AnalyticsSettings { enabled: boolean; measurementId: string; }
+export interface AnalyticsSettings {
+  enabled: boolean;
+  measurementId: string;
+  umamiEnabled: boolean;
+  umamiWebsiteId: string;
+  umamiScriptUrl: string;
+}
 
 class SettingsService {
   /**

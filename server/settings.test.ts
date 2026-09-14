@@ -63,19 +63,27 @@ describe('gallery display settings', () => {
   });
 });
 
-describe('GA4 analytics settings', () => {
+describe('analytics settings', () => {
   it('is publicly readable, disabled by default, and protects updates', async () => {
-    expect((await request(app).get('/api/settings/analytics').expect(200)).body.data).toEqual({ enabled: false, measurementId: '' });
+    expect((await request(app).get('/api/settings/analytics').expect(200)).body.data).toEqual({ enabled: false, measurementId: '', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' });
     await request(app).put('/api/settings/analytics').send({ enabled: true, measurementId: 'G-TEST123' }).expect(401);
   });
 
-  it('validates, normalizes, persists, and retains the ID while disabled', async () => {
-    await agent.put('/api/settings/analytics').send({ enabled: true, measurementId: 'UA-123' }).expect(400);
-    await agent.put('/api/settings/analytics').send({ enabled: true, measurementId: '' }).expect(400);
-    await agent.put('/api/settings/analytics').send({ enabled: true, measurementId: ' g-test123 ' }).expect(200);
-    expect((await request(app).get('/api/settings/analytics')).body.data).toEqual({ enabled: true, measurementId: 'G-TEST123' });
-    await agent.put('/api/settings/analytics').send({ enabled: false, measurementId: '' }).expect(200);
-    expect((await request(app).get('/api/settings/analytics')).body.data).toEqual({ enabled: false, measurementId: 'G-TEST123' });
+  it('validates, normalizes, persists, and retains both providers while disabled', async () => {
+    const umamiOff = { umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' };
+    await agent.put('/api/settings/analytics').send({ enabled: true, measurementId: 'UA-123', ...umamiOff }).expect(400);
+    await agent.put('/api/settings/analytics').send({ enabled: true, measurementId: '', ...umamiOff }).expect(400);
+    await agent.put('/api/settings/analytics').send({ enabled: false, measurementId: '', umamiEnabled: true, umamiWebsiteId: '', umamiScriptUrl: 'https://stats.example.com/script.js' }).expect(400);
+    await agent.put('/api/settings/analytics').send({ enabled: false, measurementId: '', umamiEnabled: true, umamiWebsiteId: 'site-one', umamiScriptUrl: 'javascript:alert(1)' }).expect(400);
+    await agent.put('/api/settings/analytics').send({ enabled: true, measurementId: ' g-test123 ', umamiEnabled: true, umamiWebsiteId: ' site-one ', umamiScriptUrl: ' https://stats.example.com/script.js ' }).expect(200);
+    expect((await request(app).get('/api/settings/analytics')).body.data).toEqual({ enabled: true, measurementId: 'G-TEST123', umamiEnabled: true, umamiWebsiteId: 'site-one', umamiScriptUrl: 'https://stats.example.com/script.js' });
+    await agent.put('/api/settings/analytics').send({ enabled: false, measurementId: '', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: '' }).expect(200);
+    expect((await request(app).get('/api/settings/analytics')).body.data).toEqual({ enabled: false, measurementId: 'G-TEST123', umamiEnabled: false, umamiWebsiteId: 'site-one', umamiScriptUrl: 'https://stats.example.com/script.js' });
+  });
+
+  it('fills Umami defaults when reading a legacy GA4 record', async () => {
+    await dbRun("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('analytics_config', ?, datetime('now'))", [JSON.stringify({ enabled: true, measurementId: 'G-LEGACY' })]);
+    expect((await request(app).get('/api/settings/analytics')).body.data).toEqual({ enabled: true, measurementId: 'G-LEGACY', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' });
   });
 });
 

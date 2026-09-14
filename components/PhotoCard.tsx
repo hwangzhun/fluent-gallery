@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowUpRight, Heart } from 'lucide-react';
 import { Photo } from '../types';
-import { likeService } from '../api';
+import { likeService } from '../api/likeService';
 import { PhotoImage } from './PhotoImage';
 import { analytics } from '../api/analyticsService';
 

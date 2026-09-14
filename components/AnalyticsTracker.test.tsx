@@ -16,7 +16,7 @@ function Navigation() {
 
 beforeEach(() => {
   analytics.reset();
-  vi.mocked(settingsService.getAnalyticsSettings).mockResolvedValue({ enabled: true, measurementId: 'G-TEST123' });
+  vi.mocked(settingsService.getAnalyticsSettings).mockResolvedValue({ enabled: true, measurementId: 'G-TEST123', umamiEnabled: false, umamiWebsiteId: '', umamiScriptUrl: 'https://cloud.umami.is/script.js' });
 });
 afterEach(() => { cleanup(); analytics.reset(); vi.restoreAllMocks(); });
 
