@@ -15,10 +15,10 @@ vi.mock('../api/settingsService', () => ({ settingsService: { getAuthorSettings:
 
 vi.mock('exifr', () => ({ default: { parse: vi.fn() } }));
 vi.mock('../api/tagService', () => ({
-  tagService: { getAllTagNames: vi.fn().mockResolvedValue([]), createTag: vi.fn() },
+  tagService: { getAllTagNames: vi.fn().mockResolvedValue(['风景']), createTag: vi.fn() },
 }));
 vi.mock('../api/aiService', () => ({
-  aiService: { suggestMetadata: vi.fn(), suggestMetadataForPhoto: vi.fn() },
+  aiService: { suggestTitle: vi.fn(), suggestTitleForPhoto: vi.fn(), suggestMetadata: vi.fn(), suggestMetadataForPhoto: vi.fn() },
 }));
 
 function file(name: string, lastModified = 1) {
@@ -49,6 +49,7 @@ describe('PhotoModal batch upload', () => {
     vi.mocked(settingsService.getAuthorSettings).mockReset().mockResolvedValue({ author: '', copyright: '' });
     vi.mocked(exifr.parse).mockResolvedValue(undefined);
     vi.mocked(aiService.suggestMetadata).mockResolvedValue({ title: '风里的光', tags: ['日常', '光影', '街头'] });
+    vi.mocked(aiService.suggestTitle).mockResolvedValue('新生成的标题');
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: vi.fn(() => `blob:preview-${previewIndex++}`),
@@ -152,6 +153,23 @@ describe('PhotoModal batch upload', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑第 2 张：风经过街角' }));
     expect(screen.getByLabelText('标题')).toHaveValue('风经过街角');
     expect(aiService.suggestMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it('regenerates only the active upload title and keeps tags and other photos unchanged', async () => {
+    render(<PhotoModal isOpen mode="upload" presentation="workspace" onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('选择要上传的照片'), { target: { files: [file('first.jpg'), file('second.jpg')] } });
+    const tagInput = await screen.findByLabelText('标签');
+    fireEvent.change(tagInput, { target: { value: '已有' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+
+    expect(screen.getByTestId('available-tags')).toHaveClass('md:flex-1');
+    fireEvent.click(screen.getByRole('button', { name: '重新生成标题' }));
+    await waitFor(() => expect(screen.getByLabelText('标题')).toHaveValue('新生成的标题'));
+    expect(screen.getByText('已有')).toBeInTheDocument();
+    expect(aiService.suggestTitle).toHaveBeenCalledWith(expect.objectContaining({ name: 'first.jpg' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑第 2 张：second' }));
+    expect(screen.getByLabelText('标题')).toHaveValue('second');
   });
 
   it('continues after a failure, shows results, and retries only failed photos', async () => {
@@ -334,6 +352,7 @@ describe('PhotoModal batch upload', () => {
 describe('PhotoModal edit mode', () => {
   beforeEach(() => {
     vi.mocked(aiService.suggestMetadataForPhoto).mockResolvedValue({ title: '城市睡在雨里', tags: ['night', '雨夜', '街头'] });
+    vi.mocked(aiService.suggestTitleForPhoto).mockResolvedValue('雨后的城');
   });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -378,6 +397,18 @@ describe('PhotoModal edit mode', () => {
     expect(screen.getByText('night')).toBeInTheDocument();
     expect(screen.getByText('雨夜')).toBeInTheDocument();
     expect(screen.getByText('街头')).toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('regenerates an existing photo title without changing tags or saving', async () => {
+    const photo: Photo = { id: 'photo-title', url: '/full.jpg', thumbnailUrl: '/thumb.jpg', title: '旧标题', tags: ['night'], year: 2026, width: 1200, height: 800, createdAt: '', likesCount: 0, viewsCount: 0 };
+    const onUpdate = vi.fn();
+    render(<PhotoModal isOpen mode="edit" photo={photo} onClose={vi.fn()} onUpdate={onUpdate} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '重新生成标题' }));
+    await waitFor(() => expect(screen.getByLabelText('标题')).toHaveValue('雨后的城'));
+    expect(screen.getByText('night')).toBeInTheDocument();
+    expect(aiService.suggestTitleForPhoto).toHaveBeenCalledWith('photo-title');
     expect(onUpdate).not.toHaveBeenCalled();
   });
 });

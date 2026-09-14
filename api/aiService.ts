@@ -15,6 +15,22 @@ async function readAiResult<T>(response: Response, fallback: string): Promise<T>
 }
 
 export const aiService = {
+  async suggestTitle(file: File): Promise<string> {
+    const body = new FormData();
+    body.append('file', file);
+    const response = await apiFetch('/ai/title', { method: 'POST', body });
+    return (await readAiResult<{ title: string }>(response, 'AI 标题生成失败')).title;
+  },
+
+  async suggestTitleForPhoto(photoId: string): Promise<string> {
+    const response = await apiFetch('/ai/title/photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photoId }),
+    });
+    return (await readAiResult<{ title: string }>(response, 'AI 标题生成失败')).title;
+  },
+
   async suggestTags(file: File): Promise<string[]> {
     const body = new FormData();
     body.append('file', file);

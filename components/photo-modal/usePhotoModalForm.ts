@@ -79,9 +79,11 @@ export function usePhotoModalForm({
   const [error, setError] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [titleGeneratingTarget, setTitleGeneratingTarget] = useState<string | null>(null);
   const nextId = useRef(0);
   const previewUrls = useRef(new Set<string>());
   const uploadInFlight = useRef(false);
+  const titleGenerationInFlight = useRef(false);
   const authorRequest = useRef<Promise<AuthorSettings | null> | null>(null);
   const [authorReady, setAuthorReady] = useState(false);
   const [authorError, setAuthorError] = useState('');
@@ -378,7 +380,7 @@ export function usePhotoModalForm({
   };
 
   const suggestMetadata = async () => {
-    if (phase !== 'editing' || items.length === 0 || analyzing) return;
+    if (phase !== 'editing' || items.length === 0 || analyzing || titleGenerationInFlight.current) return;
     setAnalyzing(true);
     let next = 0;
     const workers = Array.from({ length: Math.min(2, items.length) }, async () => {
@@ -402,7 +404,7 @@ export function usePhotoModalForm({
   };
 
   const suggestEditMetadata = async () => {
-    if (!isEditMode || !photo || analyzing || saving) return;
+    if (!isEditMode || !photo || analyzing || saving || titleGenerationInFlight.current) return;
     setAnalyzing(true);
     setError(null);
     try {
@@ -416,6 +418,45 @@ export function usePhotoModalForm({
       setError(reason instanceof Error ? reason.message : 'AI 照片信息生成失败');
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const regenerateTitle = async () => {
+    if (analyzing || saving || titleGenerationInFlight.current) return;
+    if (isEditMode) {
+      if (!photo) return;
+      titleGenerationInFlight.current = true;
+      setTitleGeneratingTarget('edit');
+      setError(null);
+      try {
+        const title = await aiService.suggestTitleForPhoto(photo.id);
+        setEditData(current => ({ ...current, title }));
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'AI 标题生成失败');
+      } finally {
+        titleGenerationInFlight.current = false;
+        setTitleGeneratingTarget(null);
+      }
+      return;
+    }
+
+    if (phase !== 'editing' || !activeItem) return;
+    titleGenerationInFlight.current = true;
+    const target = activeItem;
+    setTitleGeneratingTarget(target.id);
+    setItems(current => current.map(item => item.id === target.id ? { ...item, titleError: undefined } : item));
+    try {
+      const title = await aiService.suggestTitle(target.file);
+      setItems(current => current.map(item => item.id === target.id
+        ? { ...item, data: { ...item.data, title }, titleError: undefined }
+        : item));
+    } catch (reason) {
+      setItems(current => current.map(item => item.id === target.id
+        ? { ...item, titleError: reason instanceof Error ? reason.message : 'AI 标题生成失败' }
+        : item));
+    } finally {
+      titleGenerationInFlight.current = false;
+      setTitleGeneratingTarget(null);
     }
   };
 
@@ -440,6 +481,9 @@ export function usePhotoModalForm({
     retryFailed,
     suggestMetadata,
     analyzing,
+    regenerateTitle,
+    titleGenerating: titleGeneratingTarget !== null,
+    activeTitleGenerating: titleGeneratingTarget === (isEditMode ? 'edit' : activeItem?.id),
     saving,
     suggestEditMetadata,
     selectionNotice,

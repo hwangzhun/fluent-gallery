@@ -40,6 +40,8 @@ tsx server/index.ts
 
 - `POST /api/ai/metadata` - 管理员上传单张照片，生成 `{ title, tags }`；标题为 15 字以内的中文标题，标签优先复用已有标签。
 - `POST /api/ai/metadata/photo` - 管理员提交 `{ photoId }`，为已存照片生成标题与标签。
+- `POST /api/ai/title` - 管理员上传单张照片，只生成 `{ title }`。
+- `POST /api/ai/title/photo` - 管理员提交 `{ photoId }`，只为已存照片生成标题。
 - 原有 `POST /api/ai/tags` 和 `POST /api/ai/tags/photo` 保留兼容。
 
 ## 数据库

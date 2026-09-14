@@ -16,6 +16,31 @@ describe('aiService', () => {
     });
   });
 
+  it('generates only a title for an uploaded file', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { title: '雨落长街' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(aiService.suggestTitle(new File(['image'], 'street.jpg', { type: 'image/jpeg' }))).resolves.toBe('雨落长街');
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/ai/title'), expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
+  });
+
+  it('generates only a title for a stored photo', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { title: '远山入云' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(aiService.suggestTitleForPhoto('photo-2')).resolves.toBe('远山入云');
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/ai/title/photo'), expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ photoId: 'photo-2' }),
+    }));
+  });
+
   it('reports an invalid service response instead of exposing a JSON parse error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
 

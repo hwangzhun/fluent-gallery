@@ -99,6 +99,46 @@ it('loads and saves GA4 analytics settings from the dedicated tab', async () => 
   await waitFor(() => expect(settingsService.updateAnalyticsSettings).toHaveBeenCalledWith({ enabled: true, measurementId: 'G-TEST123' }));
 });
 
+it('masks configured storage and API keys without submitting the mask', async () => {
+  vi.mocked(settingsService.getStorageSettings).mockResolvedValueOnce({
+    mode: 'oss',
+    local: { uploadDir: './uploads', publicUrl: '/uploads' },
+    oss: { provider: 'aliyun', uploadDir: 'gallery', cloudImageProcessing: false, publicUrl: '', region: 'oss-cn-hangzhou', bucket: 'gallery', accessKeyId: '', accessKeySecret: '', hasAccessKeyId: true, hasAccessKeySecret: true },
+  });
+  vi.mocked(settingsService.getAiSettings).mockResolvedValueOnce({ baseUrl: 'https://api.example.com', model: 'vision', apiKey: '', hasApiKey: true });
+  vi.mocked(settingsService.updateStorageSettings).mockResolvedValueOnce(undefined);
+  vi.mocked(settingsService.updateAiSettings).mockResolvedValueOnce(undefined);
+  render(<SettingsPanel onSessionExpired={vi.fn()} />);
+
+  fireEvent.click(await screen.findByRole('button', { name: '存储' }));
+  const accessKeyId = screen.getByLabelText('Access Key ID');
+  const accessKeySecret = screen.getByLabelText('Access Key Secret');
+  expect(accessKeyId).toHaveValue('********');
+  expect(accessKeySecret).toHaveValue('********');
+  fireEvent.focus(accessKeyId);
+  expect(accessKeyId).toHaveValue('');
+  fireEvent.blur(accessKeyId);
+  expect(accessKeyId).toHaveValue('********');
+  fireEvent.focus(accessKeySecret);
+  fireEvent.change(accessKeySecret, { target: { value: 'replacement-secret' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存存储设置' }));
+  await waitFor(() => expect(settingsService.updateStorageSettings).toHaveBeenCalledWith(expect.objectContaining({
+    oss: expect.objectContaining({ accessKeyId: '', accessKeySecret: 'replacement-secret' }),
+  })));
+  expect(JSON.stringify(vi.mocked(settingsService.updateStorageSettings).mock.calls.at(-1)?.[0])).not.toContain('********');
+  await waitFor(() => expect(accessKeySecret).toHaveValue('********'));
+
+  fireEvent.click(screen.getByRole('button', { name: 'API 设置' }));
+  const apiKey = screen.getByLabelText('API Key');
+  expect(apiKey).toHaveValue('********');
+  fireEvent.focus(apiKey);
+  fireEvent.change(apiKey, { target: { value: 'replacement-api-key' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存 API 设置' }));
+  await waitFor(() => expect(settingsService.updateAiSettings).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'replacement-api-key' })));
+  expect(JSON.stringify(vi.mocked(settingsService.updateAiSettings).mock.calls.at(-1)?.[0])).not.toContain('********');
+  await waitFor(() => expect(apiKey).toHaveValue('********'));
+});
+
 it('shows person-free Fluent Gallery SEO defaults', async () => {
   render(<SettingsPanel onSessionExpired={vi.fn()} />);
   fireEvent.click(await screen.findByRole('button', { name: 'SEO' }));

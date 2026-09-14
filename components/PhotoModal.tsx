@@ -101,7 +101,7 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
               {form.failedCount > 0 && <button type="button" aria-label={`重试失败项（${form.failedCount}）`} onClick={form.retryFailed} className="photo-workspace-secondary">重试失败项（{form.failedCount}）</button>}
               <button type="button" onClick={form.handleClose} className="photo-workspace-primary">返回照片管理</button>
             </> : <>
-              <button type="button" aria-label={form.analyzing ? 'AI 正在分析…' : 'AI 生成标题与标签'} onClick={() => void form.suggestMetadata()} disabled={form.phase !== 'editing' || form.items.length === 0 || form.analyzing} className="photo-workspace-secondary"><Sparkles size={16} />{form.analyzing ? '分析中…' : 'AI 生成'}</button>
+              <button type="button" aria-label={form.analyzing ? 'AI 正在分析…' : 'AI 生成标题与标签'} onClick={() => void form.suggestMetadata()} disabled={form.phase !== 'editing' || form.items.length === 0 || form.analyzing || form.titleGenerating} className="photo-workspace-secondary"><Sparkles size={16} />{form.analyzing ? '分析中…' : 'AI 生成'}</button>
               <button type="submit" form="photo-form" aria-label={form.phase === 'uploading' ? `上传中 ${form.completedCount} / ${form.items.length}` : `上传 ${form.items.length} 张照片`} disabled={form.phase === 'uploading' || form.items.length === 0 || form.metadataLoading} className="photo-workspace-primary">{form.phase === 'uploading' ? <><LoaderCircle size={17} className="animate-spin" />上传中 {form.completedCount} / {form.items.length}</> : <>上传 {form.items.length} 张照片</>}</button>
             </>}
           </div>}
@@ -157,13 +157,17 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
                   onFileSelect={form.handleFileSelect}
                   onChange={form.updateField}
                   onToggleShared={form.toggleSharedField}
+                  onRegenerateTitle={() => void form.regenerateTitle()}
+                  titleGenerating={form.activeTitleGenerating}
+                  titleGenerationDisabled={form.analyzing || form.titleGenerating}
+                  expandTags={isWorkspace}
                 />
               ) : null
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <PhotoPreview previewUrl={photo?.thumbnailUrl || null} title={form.editData.title} />
-                  <PhotoBasicFields data={form.editData} onChange={form.updateField} />
+                  <PhotoBasicFields data={form.editData} onChange={form.updateField} onRegenerateTitle={() => void form.regenerateTitle()} titleGenerating={form.activeTitleGenerating} titleGenerationDisabled={form.saving || form.analyzing || form.titleGenerating} />
                 </div>
                 <PhotoExifFields data={form.editData} onChange={form.updateField} />
               </>
@@ -188,7 +192,7 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
               <button type="button" onClick={form.handleClose} className="min-w-28 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-medium" disabled={form.saving}>
                 取消
               </button>
-              <button type="button" aria-label={form.analyzing ? "AI 正在分析…" : "AI 生成标题与标签"} onClick={() => void form.suggestEditMetadata()} disabled={form.saving || form.analyzing} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"><Sparkles size={16} /><span className="photo-button-mobile">{form.analyzing ? '分析中…' : 'AI 生成'}</span><span className="photo-button-desktop">{form.analyzing ? 'AI 正在分析…' : 'AI 生成标题与标签'}</span></button>
+              <button type="button" aria-label={form.analyzing ? "AI 正在分析…" : "AI 生成标题与标签"} onClick={() => void form.suggestEditMetadata()} disabled={form.saving || form.analyzing || form.titleGenerating} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"><Sparkles size={16} /><span className="photo-button-mobile">{form.analyzing ? '分析中…' : 'AI 生成'}</span><span className="photo-button-desktop">{form.analyzing ? 'AI 正在分析…' : 'AI 生成标题与标签'}</span></button>
               <button type="submit" form="photo-form" aria-label={form.saving ? "保存中..." : "保存更改"} disabled={form.saving} className={`min-w-32 px-4 py-2.5 rounded-lg text-white font-medium transition-all ${form.saving ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30'}`}>
                 <span className="photo-button-mobile">{form.saving ? '保存中…' : '保存'}</span><span className="photo-button-desktop">{form.saving ? '保存中...' : '保存更改'}</span>
               </button>
@@ -209,7 +213,7 @@ export const PhotoModal: React.FC<PhotoModalProps> = ({
               <button type="button" onClick={requestClose} disabled={form.phase === 'uploading'} className="min-w-28 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50">
                 取消
               </button>
-              <button type="button" aria-label={form.analyzing ? "AI 正在分析…" : "AI 生成标题与标签"} onClick={() => void form.suggestMetadata()} disabled={form.phase !== 'editing' || form.items.length === 0 || form.analyzing} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-medium text-violet-700 disabled:opacity-50"><Sparkles size={16} /><span className="photo-button-mobile">{form.analyzing ? '分析中…' : 'AI 生成'}</span><span className="photo-button-desktop">{form.analyzing ? 'AI 正在分析…' : 'AI 生成标题与标签'}</span></button>
+              <button type="button" aria-label={form.analyzing ? "AI 正在分析…" : "AI 生成标题与标签"} onClick={() => void form.suggestMetadata()} disabled={form.phase !== 'editing' || form.items.length === 0 || form.analyzing || form.titleGenerating} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-medium text-violet-700 disabled:opacity-50"><Sparkles size={16} /><span className="photo-button-mobile">{form.analyzing ? '分析中…' : 'AI 生成'}</span><span className="photo-button-desktop">{form.analyzing ? 'AI 正在分析…' : 'AI 生成标题与标签'}</span></button>
               <button
                 type="submit"
                 form="photo-form"

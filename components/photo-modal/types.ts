@@ -73,6 +73,7 @@ export interface PhotoUploadItem {
   queuedUpload?: QueuedPhotoUpload;
   analysisStatus?: 'loading' | 'ready' | 'failed';
   analysisError?: string;
+  titleError?: string;
 }
 
 export interface BatchUploadResult {

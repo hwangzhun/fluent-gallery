@@ -1,6 +1,6 @@
 import { AlbumSelector } from '../admin/AlbumSelector';
 import type { ReactNode } from 'react';
-import { Aperture, Calendar, Camera, Copyright, Film, Gauge, MapPin, User } from 'lucide-react';
+import { Aperture, Calendar, Camera, Copyright, Film, Gauge, LoaderCircle, MapPin, RefreshCw, User } from 'lucide-react';
 import { TagSelector } from '../TagSelector';
 import type { BatchFieldKey, PhotoFormData } from './types';
 
@@ -43,16 +43,20 @@ export function SharedFieldToggle({
 interface FieldLabelProps extends SharedFieldToggleProps {
   icon?: ReactNode;
   children: ReactNode;
+  action?: ReactNode;
 }
 
-function FieldLabel({ icon, children, ...toggleProps }: FieldLabelProps) {
+function FieldLabel({ icon, children, action, ...toggleProps }: FieldLabelProps) {
   return (
     <div className="mb-1 flex items-center justify-between gap-3">
       <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
         {icon}
         {children}
       </label>
-      <SharedFieldToggle {...toggleProps} />
+      <div className="flex items-center gap-3">
+        {action}
+        <SharedFieldToggle {...toggleProps} />
+      </div>
     </div>
   );
 }
@@ -82,6 +86,10 @@ interface PhotoBasicFieldsProps {
   onToggleShared?: (field: BatchFieldKey) => void;
   disabled?: boolean;
   editorKey?: string;
+  onRegenerateTitle?: () => void;
+  titleGenerating?: boolean;
+  titleGenerationDisabled?: boolean;
+  expandTags?: boolean;
 }
 
 export function PhotoBasicFields({
@@ -91,14 +99,34 @@ export function PhotoBasicFields({
   onToggleShared,
   disabled,
   editorKey,
+  onRegenerateTitle,
+  titleGenerating = false,
+  titleGenerationDisabled = false,
+  expandTags = false,
 }: PhotoBasicFieldsProps) {
   const toggleProps = { sharedFields, onToggleShared, disabled };
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${expandTags ? 'md:flex md:h-full md:min-h-0 md:flex-col md:gap-4 md:space-y-0' : ''}`}>
       <div><FieldLabel field="albumIds" label="画册" {...toggleProps}>所属画册</FieldLabel><AlbumSelector value={data.albumIds || []} disabled={disabled} onChange={ids => onChange('albumIds', ids)} /></div>
       <div>
-        <FieldLabel field="title" label="标题" {...toggleProps}>标题</FieldLabel>
+        <FieldLabel
+          field="title"
+          label="标题"
+          {...toggleProps}
+          action={onRegenerateTitle && (
+            <button
+              type="button"
+              onClick={onRegenerateTitle}
+              disabled={disabled || titleGenerationDisabled}
+              aria-label={titleGenerating ? '正在重新生成标题' : '重新生成标题'}
+              className="inline-flex items-center gap-1 text-xs font-normal text-violet-600 transition hover:text-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {titleGenerating ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {titleGenerating ? '生成中…' : '重新生成'}
+            </button>
+          )}
+        >标题</FieldLabel>
         <input
           type="text"
           aria-label="标题"
@@ -133,6 +161,7 @@ export function PhotoBasicFields({
         disabled={disabled}
         labelAction={<SharedFieldToggle field="tags" label="标签" {...toggleProps} />}
         resetKey={editorKey}
+        expandAvailableHeight={expandTags}
       />
     </div>
   );

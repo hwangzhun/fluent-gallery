@@ -9,6 +9,7 @@ interface TagSelectorProps {
   disabled?: boolean;
   labelAction?: React.ReactNode;
   resetKey?: string;
+  expandAvailableHeight?: boolean;
 }
 
 export const TagSelector: React.FC<TagSelectorProps> = ({ 
@@ -18,6 +19,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
   disabled = false,
   labelAction,
   resetKey,
+  expandAvailableHeight = false,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -173,7 +175,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
   const availableTags = allTags.filter(tag => !currentTags.includes(tag));
 
   return (
-    <div className="relative">
+    <div className={`relative ${expandAvailableHeight ? 'md:flex md:min-h-0 md:flex-1 md:flex-col' : ''}`}>
       {labelAction ? (
         <div className="mb-1 flex items-center justify-between gap-3">
           <label htmlFor={inputId} className="text-sm font-medium text-gray-700">标签</label>
@@ -276,9 +278,9 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
 
       {/* 已有标签列表 */}
       {availableTags.length > 0 && (
-        <div className="mt-3">
+        <div className={`mt-3 ${expandAvailableHeight ? 'md:flex md:min-h-0 md:flex-1 md:flex-col' : ''}`}>
           <div className="text-xs text-gray-500 mb-2 font-medium">已有标签（点击选择）</div>
-          <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 max-h-40 overflow-y-auto">
+          <div data-testid="available-tags" className={`flex flex-wrap content-start gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 max-h-40 overflow-y-auto ${expandAvailableHeight ? 'md:max-h-none md:min-h-0 md:flex-1' : ''}`}>
             {availableTags.map((tag) => (
               <button
                 key={tag}

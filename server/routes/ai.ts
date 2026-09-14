@@ -131,6 +131,13 @@ async function generateTags(file: Pick<Express.Multer.File, 'buffer' | 'mimetype
   return generateTagsFromImage(image, settings, tags);
 }
 
+async function generateTitle(file: Pick<Express.Multer.File, 'buffer' | 'mimetype' | 'originalname'>) {
+  const settings = await config();
+  if (!settings.apiKey) throw new AiGatewayError('请先在 API 设置中保存 API Key', 400);
+  const image = await prepareImageForVision(file);
+  return generateTitleFromImage(image, settings);
+}
+
 async function generateMetadata(file: Pick<Express.Multer.File, 'buffer' | 'mimetype' | 'originalname'>) {
   const settings = await config();
   if (!settings.apiKey) throw new AiGatewayError('请先在 API 设置中保存 API Key', 400);
@@ -187,6 +194,39 @@ router.post('/tags/photo', requireAdmin, async (request, response) => {
     const message = error instanceof Error ? error.message : 'AI 自动打标签失败';
     console.error('AI 自动打标签失败:', error);
     const status = error instanceof AiTagValidationError
+      ? 422
+      : error instanceof AiGatewayError && error.status >= 400 && error.status < 500
+        ? error.status
+        : 502;
+    response.status(status).json({ success: false, error: message });
+  }
+});
+
+router.post('/title', requireAdmin, upload.single('file'), async (request, response) => {
+  try {
+    if (!request.file) return response.status(400).json({ success: false, error: '请选择一张图片' });
+    return response.json({ success: true, data: { title: await generateTitle(request.file) } });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : 'AI 标题生成失败';
+    console.error('AI 标题生成失败:', error);
+    const status = error instanceof AiMetadataValidationError
+      ? 422
+      : error instanceof AiGatewayError && error.status >= 400 && error.status < 500
+        ? error.status
+        : 502;
+    response.status(status).json({ success: false, error: message });
+  }
+});
+
+router.post('/title/photo', requireAdmin, async (request, response) => {
+  try {
+    const photoId = typeof request.body?.photoId === 'string' ? request.body.photoId.trim() : '';
+    if (!photoId) return response.status(400).json({ success: false, error: '照片 ID 无效' });
+    return response.json({ success: true, data: { title: await generateTitle(await getStoredPhotoFile(photoId)) } });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : 'AI 标题生成失败';
+    console.error('AI 标题生成失败:', error);
+    const status = error instanceof AiMetadataValidationError
       ? 422
       : error instanceof AiGatewayError && error.status >= 400 && error.status < 500
         ? error.status
