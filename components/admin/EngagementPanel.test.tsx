@@ -46,6 +46,24 @@ describe('EngagementPanel', () => {
     expect(screen.getByText('山川')).toBeInTheDocument();
   });
 
+  it('keeps all 20 recent likes in the compact scroll region', async () => {
+    const recentLikes = Array.from({ length: 20 }, (_, index) => ({
+      id: index + 1,
+      photoId: `photo-${index + 1}`,
+      title: `最近作品 ${index + 1}`,
+      thumbnailUrl: `/recent-${index + 1}.jpg`,
+      createdAt: `2026-09-15T${String(index).padStart(2, '0')}:00:00.000Z`,
+    }));
+    vi.mocked(engagementService.getReport).mockResolvedValue({ ...report, recentLikes });
+
+    render(<EngagementPanel onSessionExpired={vi.fn()} onNotificationChange={vi.fn()} />);
+
+    const list = await screen.findByRole('list', { name: '最近点赞记录' });
+    expect(list).toHaveAttribute('tabindex', '0');
+    expect(list.querySelectorAll('li')).toHaveLength(20);
+    expect(screen.getByText('最近作品 20')).toBeInTheDocument();
+  });
+
   it('reloads the report when the range changes', async () => {
     render(<EngagementPanel onSessionExpired={vi.fn()} onNotificationChange={vi.fn()} />);
     await screen.findByText('今日点赞');

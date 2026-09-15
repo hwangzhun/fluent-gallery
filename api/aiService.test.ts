@@ -27,6 +27,35 @@ describe('aiService', () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/ai/title'), expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
   });
 
+  it('uploads a compact JPEG preview for a large browser-decodable image', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { title: '雨落长街' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const close = vi.fn();
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 6000, height: 4000, close }));
+    vi.stubGlobal('document', {
+      createElement: vi.fn().mockReturnValue({
+        width: 0,
+        height: 0,
+        getContext: () => ({ fillStyle: '', fillRect: vi.fn(), drawImage: vi.fn() }),
+        toBlob: (callback: BlobCallback) => callback(new Blob(['compact'], { type: 'image/jpeg' })),
+      }),
+    });
+
+    const original = new File([new Uint8Array(2 * 1024 * 1024)], 'camera.jpg', { type: 'image/jpeg' });
+    await aiService.suggestTitle(original);
+
+    const body = fetchMock.mock.calls[0][1]?.body as FormData;
+    const uploaded = body.get('file') as File;
+    expect(uploaded).not.toBe(original);
+    expect(uploaded.name).toBe('camera-ai.jpg');
+    expect(uploaded.type).toBe('image/jpeg');
+    expect(uploaded.size).toBeLessThan(original.size);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('generates only a title for a stored photo', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       success: true,

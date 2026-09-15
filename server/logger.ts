@@ -75,12 +75,19 @@ export function requestLogger(request: Request, response: Response, next: NextFu
   }
 
   const startedAt = process.hrtime.bigint();
+  let completed = false;
   response.on('finish', () => {
+    completed = true;
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
     const message = `${request.method} ${request.originalUrl} ${response.statusCode} ${durationMs.toFixed(1)}ms`;
     if (response.statusCode >= 500) console.error(message);
     else if (response.statusCode >= 400) console.warn(message);
     else console.info(message);
+  });
+  response.on('close', () => {
+    if (completed) return;
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    console.warn(`${request.method} ${request.originalUrl} connection-closed ${durationMs.toFixed(1)}ms`);
   });
   next();
 }

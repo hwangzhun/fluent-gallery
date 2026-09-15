@@ -9,6 +9,7 @@ import { prepareImageForVision } from '../imageProcessing';
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 const defaults = { baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash' };
+const AI_REQUEST_TIMEOUT_MS = 40_000;
 
 class AiGatewayError extends Error {
   constructor(message: string, readonly status: number = 502) { super(message); }
@@ -69,14 +70,16 @@ async function requestTags(image: Buffer, settings: { baseUrl: string; model: st
     : `输出的 3 个标签中至少 ${requiredExisting} 个必须逐字从已有标签中选择；最多可新增 ${3 - requiredExisting} 个标签。`;
   const prompt = `分析这张摄影作品，返回最贴切的 3 个中文标签。${reuseRule} 不要解释、不要使用 Markdown，只返回 JSON：{"tags":["标签一","标签二","标签三"]}。已有标签：${tags.join('、') || '（暂无）'}`;
   let response: Response;
+  const signal = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
       // DeepSeek enables reasoning by default. Tagging is a constrained extraction task,
       // so disable it; otherwise a small output budget can be consumed before the JSON reply.
-      body: JSON.stringify({ model: settings.model, thinking: { type: 'disabled' }, max_tokens: 256, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image.toString('base64')}`, detail: 'low' } }] }] }),
+      body: JSON.stringify({ model: settings.model, thinking: { type: 'disabled' }, max_tokens: 256, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image.toString('base64')}`, detail: 'low' } }] }] }), signal,
     });
   } catch (error) {
+    if (signal.aborted) throw new AiGatewayError('AI 服务响应超时，请稍后重试', 504);
     throw new AiGatewayError(`无法连接 AI 服务：${error instanceof Error ? error.message : '网络请求失败'}`);
   }
   const result = await response.json().catch(() => null) as any;
@@ -86,12 +89,14 @@ async function requestTags(image: Buffer, settings: { baseUrl: string; model: st
 
 async function requestTitle(image: Buffer, settings: { baseUrl: string; model: string; apiKey?: string }) {
   let response: Response;
+  const signal = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
-      body: JSON.stringify({ model: settings.model, thinking: { type: 'disabled' }, max_tokens: 256, messages: [{ role: 'user', content: [{ type: 'text', text: buildTitlePrompt() }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image.toString('base64')}`, detail: 'low' } }] }] }),
+      body: JSON.stringify({ model: settings.model, thinking: { type: 'disabled' }, max_tokens: 256, messages: [{ role: 'user', content: [{ type: 'text', text: buildTitlePrompt() }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image.toString('base64')}`, detail: 'low' } }] }] }), signal,
     });
   } catch (error) {
+    if (signal.aborted) throw new AiGatewayError('AI 服务响应超时，请稍后重试', 504);
     throw new AiGatewayError(`无法连接 AI 服务：${error instanceof Error ? error.message : '网络请求失败'}`);
   }
   const result = await response.json().catch(() => null) as any;

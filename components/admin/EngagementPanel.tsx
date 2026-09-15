@@ -92,10 +92,12 @@ export function EngagementPanel({ onSessionExpired, onNotificationChange }: { on
     <div className="studio-engagement-toolbar"><div role="group" aria-label="趋势时间范围">{ranges.map(value => <button key={value} aria-pressed={days === value} onClick={() => setDays(value)}>{value} 天</button>)}</div><button className="mark-read" disabled={markingRead || report.notifications.unreadLikes === 0 || !report.notifications.latestLikeAt} onClick={() => void markRead()}><Heart size={15} />{markingRead ? '正在标记…' : report.notifications.unreadLikes ? `全部已读（${report.notifications.unreadLikes}）` : '今日已读'}</button></div>
     {error && <div className="studio-engagement-inline-error" role="alert">{error}<button onClick={() => setReload(value => value + 1)}>重试</button></div>}
     <div className="studio-engagement-cards">{cards.map(([label, value, kind]) => <article key={label}><span>{kind === 'like' ? <Heart size={16} /> : <Eye size={17} />}{label}</span><strong>{number.format(value)}</strong></article>)}</div>
-    <section className="studio-engagement-section studio-trend"><header><div><BarChart3 size={18} /><h2>每日趋势</h2></div><div className="studio-chart-legend"><span className="is-likes" />点赞<span className="is-views" />浏览</div></header><TrendChart points={report.trend} /></section>
+    <div className="studio-engagement-primary">
+      <section className="studio-engagement-section studio-trend"><header><div><BarChart3 size={18} /><h2>每日趋势</h2></div><div className="studio-chart-legend"><span className="is-likes" />点赞<span className="is-views" />浏览</div></header><TrendChart points={report.trend} /></section>
+      <section className="studio-engagement-section studio-recent-likes"><header><div><Heart size={18} /><h2>最近点赞</h2></div><span>最近 20 条</span></header>
+        {report.recentLikes.length ? <ul aria-label="最近点赞记录" tabIndex={0}>{report.recentLikes.map(item => <li key={item.id}><img src={item.thumbnailUrl} alt="" loading="lazy" /><span>{item.title}</span><time dateTime={item.createdAt}>{new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt))}</time></li>)}</ul> : <p className="studio-engagement-empty">还没有收到点赞。</p>}
+      </section>
+    </div>
     <div className="studio-engagement-rankings"><Ranking title="最多点赞" icon={<Heart size={18} />} items={report.topLikes} /><Ranking title="最多浏览" icon={<Eye size={19} />} items={report.topViews} /></div>
-    <section className="studio-engagement-section studio-recent-likes"><header><div><Heart size={18} /><h2>最近点赞</h2></div><span>最近 20 条</span></header>
-      {report.recentLikes.length ? <ul>{report.recentLikes.map(item => <li key={item.id}><img src={item.thumbnailUrl} alt="" loading="lazy" /><span>{item.title}</span><time dateTime={item.createdAt}>{new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt))}</time></li>)}</ul> : <p className="studio-engagement-empty">还没有收到点赞。</p>}
-    </section>
   </div>;
 }
