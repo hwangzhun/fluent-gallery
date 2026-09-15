@@ -45,11 +45,47 @@ describe('gallery tag rail', () => {
     expect(atEnd.defaultPrevented).toBe(false);
   });
 
-  it('still selects a tag with a normal click', async () => {
+  it('keeps pointer capture out of a normal click and selects the tag', async () => {
     const onFilterChange = vi.fn();
-    render(<GalleryFilters filter={{ year: null, tag: null }} onFilterChange={onFilterChange} compact={false} onCompactChange={vi.fn()} />);
-    fireEvent.click(await screen.findByRole('button', { name: '建筑' }));
+    const { container } = render(<GalleryFilters filter={{ year: null, tag: null }} onFilterChange={onFilterChange} compact={false} onCompactChange={vi.fn()} />);
+    const tag = await screen.findByRole('button', { name: '建筑' });
+    const scroller = container.querySelector('.gallery-filter-scroll') as HTMLDivElement;
+    const setPointerCapture = vi.fn();
+    Object.defineProperties(scroller, {
+      clientWidth: { configurable: true, value: 100 },
+      scrollWidth: { configurable: true, value: 400 },
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+    });
+
+    fireEvent.pointerDown(tag, { button: 0, pointerId: 5, clientX: 80 });
+    fireEvent.pointerUp(tag, { pointerId: 5, clientX: 80 });
+    fireEvent.click(tag);
+
+    expect(setPointerCapture).not.toHaveBeenCalled();
     expect(onFilterChange).toHaveBeenCalledWith({ tag: '建筑' });
+  });
+
+  it('treats movement below the drag threshold as a tag click', async () => {
+    const onFilterChange = vi.fn();
+    const { container } = render(<GalleryFilters filter={{ year: null, tag: null }} onFilterChange={onFilterChange} compact={false} onCompactChange={vi.fn()} />);
+    const tag = await screen.findByRole('button', { name: '人物' });
+    const scroller = container.querySelector('.gallery-filter-scroll') as HTMLDivElement;
+    const setPointerCapture = vi.fn();
+    Object.defineProperties(scroller, {
+      clientWidth: { configurable: true, value: 100 },
+      scrollWidth: { configurable: true, value: 400 },
+      scrollLeft: { configurable: true, writable: true, value: 20 },
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+    });
+
+    fireEvent.pointerDown(tag, { button: 0, pointerId: 6, clientX: 80 });
+    fireEvent.pointerMove(tag, { pointerId: 6, clientX: 77 });
+    fireEvent.pointerUp(tag, { pointerId: 6, clientX: 77 });
+    fireEvent.click(tag);
+
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(scroller.scrollLeft).toBe(20);
+    expect(onFilterChange).toHaveBeenCalledWith({ tag: '人物' });
   });
 
   it('drags the rail horizontally and does not select the tag under the release point', async () => {
@@ -68,9 +104,11 @@ describe('gallery tag rail', () => {
     });
 
     fireEvent.pointerDown(scroller, { button: 0, pointerId: 7, clientX: 120 });
+    expect(scroller.setPointerCapture).not.toHaveBeenCalled();
     fireEvent.pointerMove(scroller, { pointerId: 7, clientX: 70 });
     expect(scroller.scrollLeft).toBe(130);
     expect(scroller).toHaveClass('is-dragging');
+    expect(scroller.setPointerCapture).toHaveBeenCalledWith(7);
     fireEvent.pointerUp(scroller, { pointerId: 7, clientX: 70 });
     fireEvent.click(screen.getByRole('button', { name: '街巷' }));
     expect(onFilterChange).not.toHaveBeenCalled();

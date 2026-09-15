@@ -126,7 +126,10 @@ body:has(.gallery-shell) { min-width: 0; }
 .gallery-filter-scroll.is-dragging { cursor: grabbing; user-select: none; }
 /* Firefox: keep its standards-based scrollbar rules isolated so Chromium can use the WebKit pseudo-elements below. */
 @supports (-moz-appearance: none) {
-  .gallery-filter-scroll { scrollbar-width: thin; scrollbar-color: var(--gallery-scrollbar-thumb) transparent; }
+  .gallery-filter-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  .gallery-filter-scroll:hover,
+  .gallery-filter-scroll:focus-within,
+  .gallery-filter-scroll.is-dragging { scrollbar-color: var(--gallery-scrollbar-thumb) transparent; }
 }
 /* Chrome, Edge and Safari. Chromium's standard scrollbar properties can override these, hence the Firefox-only block above. */
 .gallery-filter-scroll::-webkit-scrollbar { -webkit-appearance: none; display: block; width: 6px; height: 4px; background: transparent; }

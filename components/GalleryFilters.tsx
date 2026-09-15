@@ -52,7 +52,6 @@ export const GalleryFilters: React.FC<GalleryFiltersProps> = ({ filter, onFilter
     const scroller = event.currentTarget;
     if (event.button !== 0 || scroller.scrollWidth <= scroller.clientWidth) return;
     tagDragRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: scroller.scrollLeft, moved: false };
-    scroller.setPointerCapture?.(event.pointerId);
   };
 
   const handleTagPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -63,6 +62,7 @@ export const GalleryFilters: React.FC<GalleryFiltersProps> = ({ filter, onFilter
     if (!drag.moved) {
       drag.moved = true;
       setDraggingTags(true);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
     }
     event.preventDefault();
     event.currentTarget.scrollLeft = drag.scrollLeft - distance;
