@@ -44,6 +44,14 @@ tsx server/index.ts
 - `POST /api/ai/title/photo` - 管理员提交 `{ photoId }`，只为已存照片生成标题。
 - 原有 `POST /api/ai/tags` 和 `POST /api/ai/tags/photo` 保留兼容。
 
+### 互动数据 API
+
+- `GET /api/engagement/report?days=7&timeZone=Asia/Hong_Kong` - 管理员读取汇总、按日趋势、热门照片和最近点赞；`days` 支持 7、30、90。
+- `GET /api/engagement/notifications?timeZone=Asia/Hong_Kong` - 读取当日未读点赞状态。
+- `POST /api/engagement/notifications/read` - 提交 `{ readThrough, timeZone }` 标记快照时间前的点赞已读。
+
+互动数据来自本地 `photo_likes` 与 `photo_views` 记录，不依赖 GA4 或 Umami。上述接口均要求管理员会话，且不返回访客指纹或 IP。
+
 ## 数据库
 
 数据库文件存储在 `data/gallery.db`（自动创建）

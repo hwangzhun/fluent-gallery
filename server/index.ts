@@ -9,6 +9,7 @@ import { ensureSettingsSchema } from './routes/settings';
 import logsRoutes from './routes/logs';
 import likeRoutes from './routes/likes';
 import viewRoutes from './routes/views';
+import engagementRoutes from './routes/engagement';
 import authRoutes, { ensureAuthSchema, requireAdmin } from './auth';
 import { storageConfig, refreshStorageConfig, resolveLocalUploadDir, migrateLegacyLocalPhotoUrls } from './storage/config';
 import { join } from 'path';
@@ -64,6 +65,7 @@ app.use('/api/photos', photoRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/albums', albumsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/engagement', requireAdmin, engagementRoutes);
 // 图库的公开展示设置由路由自行控制权限，其他设置仍需要管理员会话。
 app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
